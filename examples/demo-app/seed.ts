@@ -2,64 +2,63 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+/** Match ZenStack test helpers: descending sequence ids (pN) for stable ordering checks. */
+const REGRESSION_POST_COUNT = 22;
+
+function makePostsData(count: number) {
+  return Array.from({ length: count }, (_, i) => {
+    const sequence = count - i;
+    return {
+      id: `p${sequence}`,
+      sequence,
+      title: `P${sequence}`,
+      authorId: "u1",
+    };
+  });
+}
+
+function makeCommentsData(count: number) {
+  return Array.from({ length: count }, (_, i) => {
+    const sequence = count - i;
+    return {
+      id: `c${sequence}`,
+      postId: `p${sequence}`,
+      content: `C${sequence}`,
+      authorId: sequence % 11 === 0 ? null : "u1",
+    };
+  });
+}
+
 async function main() {
-  await prisma.tag.deleteMany();
+  await prisma.comment.deleteMany();
   await prisma.post.deleteMany();
   await prisma.user.deleteMany();
 
-  const alice = await prisma.user.create({
+  await prisma.user.create({
     data: {
-      email: "alice@example.com",
-      name: "Alice",
-      role: "admin",
+      id: "u1",
+      email: "u1@example.com",
       posts: {
-        create: [
-          {
-            title: "Hello world",
-            body: "First post",
-            published: true,
-            viewCount: 12,
-            tags: {
-              connectOrCreate: [
-                { where: { name: "news" }, create: { name: "news" } },
-                { where: { name: "meta" }, create: { name: "meta" } },
-              ],
-            },
-          },
-          {
-            title: "Draft ideas",
-            body: null,
-            published: false,
-            viewCount: 0,
-          },
-        ],
-      },
-    },
-    include: { posts: true },
-  });
-
-  const bob = await prisma.user.create({
-    data: {
-      email: "bob@example.org",
-      name: "Bob",
-      role: "member",
-      posts: {
-        create: {
-          title: "Member post",
-          published: true,
-          viewCount: 3,
-          tags: {
-            connectOrCreate: {
-              where: { name: "news" },
-              create: { name: "news" },
-            },
-          },
-        },
+        create: makePostsData(REGRESSION_POST_COUNT).map((p) => ({
+          id: p.id,
+          sequence: p.sequence,
+          title: p.title,
+        })),
       },
     },
   });
 
-  console.log("Seeded users:", alice.id, bob.id);
+  await prisma.comment.createMany({
+    data: makeCommentsData(REGRESSION_POST_COUNT),
+  });
+
+  console.log(
+    "Seeded regression dataset: u1 +",
+    REGRESSION_POST_COUNT,
+    "posts +",
+    REGRESSION_POST_COUNT,
+    "comments"
+  );
 }
 
 main()

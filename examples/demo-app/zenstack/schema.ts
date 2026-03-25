@@ -5,7 +5,7 @@
 
 /* eslint-disable */
 
-import { type SchemaDef, type AttributeApplication, type FieldDefault, ExpressionUtils } from "@zenstackhq/schema";
+import { type SchemaDef, type AttributeApplication, ExpressionUtils } from "@zenstackhq/schema";
 export class SchemaType implements SchemaDef {
     provider = {
         type: "sqlite"
@@ -18,8 +18,7 @@ export class SchemaType implements SchemaDef {
                     name: "id",
                     type: "String",
                     id: true,
-                    attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("cuid") }] }] as readonly AttributeApplication[],
-                    default: ExpressionUtils.call("cuid") as FieldDefault
+                    attributes: [{ name: "@id" }] as readonly AttributeApplication[]
                 },
                 email: {
                     name: "email",
@@ -27,28 +26,17 @@ export class SchemaType implements SchemaDef {
                     unique: true,
                     attributes: [{ name: "@unique" }] as readonly AttributeApplication[]
                 },
-                name: {
-                    name: "name",
-                    type: "String",
-                    optional: true
-                },
-                role: {
-                    name: "role",
-                    type: "String",
-                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("member") }] }] as readonly AttributeApplication[],
-                    default: "member" as FieldDefault
-                },
                 posts: {
                     name: "posts",
                     type: "Post",
                     array: true,
                     relation: { opposite: "author" }
                 },
-                createdAt: {
-                    name: "createdAt",
-                    type: "DateTime",
-                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.call("now") }] }] as readonly AttributeApplication[],
-                    default: ExpressionUtils.call("now") as FieldDefault
+                comments: {
+                    name: "comments",
+                    type: "Comment",
+                    array: true,
+                    relation: { opposite: "author" }
                 }
             },
             idFields: ["id"],
@@ -64,29 +52,21 @@ export class SchemaType implements SchemaDef {
                     name: "id",
                     type: "String",
                     id: true,
-                    attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("cuid") }] }] as readonly AttributeApplication[],
-                    default: ExpressionUtils.call("cuid") as FieldDefault
+                    attributes: [{ name: "@id" }] as readonly AttributeApplication[]
+                },
+                sequence: {
+                    name: "sequence",
+                    type: "Int"
                 },
                 title: {
                     name: "title",
                     type: "String"
                 },
-                body: {
-                    name: "body",
-                    type: "String",
-                    optional: true
-                },
-                published: {
-                    name: "published",
-                    type: "Boolean",
-                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal(false) }] }] as readonly AttributeApplication[],
-                    default: false as FieldDefault
-                },
-                viewCount: {
-                    name: "viewCount",
-                    type: "Int",
-                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal(0) }] }] as readonly AttributeApplication[],
-                    default: 0 as FieldDefault
+                author: {
+                    name: "author",
+                    type: "User",
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("authorId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "posts", fields: ["authorId"], references: ["id"], onDelete: "Cascade" }
                 },
                 authorId: {
                     name: "authorId",
@@ -95,23 +75,11 @@ export class SchemaType implements SchemaDef {
                         "author"
                     ] as readonly string[]
                 },
-                author: {
-                    name: "author",
-                    type: "User",
-                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("authorId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
-                    relation: { opposite: "posts", fields: ["authorId"], references: ["id"], onDelete: "Cascade" }
-                },
-                tags: {
-                    name: "tags",
-                    type: "Tag",
+                comments: {
+                    name: "comments",
+                    type: "Comment",
                     array: true,
-                    relation: { opposite: "posts" }
-                },
-                createdAt: {
-                    name: "createdAt",
-                    type: "DateTime",
-                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.call("now") }] }] as readonly AttributeApplication[],
-                    default: ExpressionUtils.call("now") as FieldDefault
+                    relation: { opposite: "post" }
                 }
             },
             idFields: ["id"],
@@ -119,33 +87,51 @@ export class SchemaType implements SchemaDef {
                 id: { type: "String" }
             }
         },
-        Tag: {
-            name: "Tag",
+        Comment: {
+            name: "Comment",
             fields: {
                 id: {
                     name: "id",
                     type: "String",
                     id: true,
-                    attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("cuid") }] }] as readonly AttributeApplication[],
-                    default: ExpressionUtils.call("cuid") as FieldDefault
+                    attributes: [{ name: "@id" }] as readonly AttributeApplication[]
                 },
-                name: {
-                    name: "name",
-                    type: "String",
-                    unique: true,
-                    attributes: [{ name: "@unique" }] as readonly AttributeApplication[]
+                content: {
+                    name: "content",
+                    type: "String"
                 },
-                posts: {
-                    name: "posts",
+                post: {
+                    name: "post",
                     type: "Post",
-                    array: true,
-                    relation: { opposite: "tags" }
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("postId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "comments", fields: ["postId"], references: ["id"], onDelete: "Cascade" }
+                },
+                postId: {
+                    name: "postId",
+                    type: "String",
+                    foreignKeyFor: [
+                        "post"
+                    ] as readonly string[]
+                },
+                author: {
+                    name: "author",
+                    type: "User",
+                    optional: true,
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("authorId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "comments", fields: ["authorId"], references: ["id"] }
+                },
+                authorId: {
+                    name: "authorId",
+                    type: "String",
+                    optional: true,
+                    foreignKeyFor: [
+                        "author"
+                    ] as readonly string[]
                 }
             },
             idFields: ["id"],
             uniqueFields: {
-                id: { type: "String" },
-                name: { type: "String" }
+                id: { type: "String" }
             }
         }
     } as const;

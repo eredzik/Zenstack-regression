@@ -7,29 +7,28 @@ datasource db {
   url      = "file:./dev.db"
 }
 
+/// Regression shape from ZenStack client-api relation / order-by nested includes tests.
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  role      String   @default("member")
-  posts     Post[]
-  createdAt DateTime @default(now())
+  id       String    @id
+  email    String    @unique
+  posts    Post[]
+  comments Comment[]
 }
 
 model Post {
-  id         String   @id @default(cuid())
-  title      String
-  body       String?
-  published  Boolean  @default(false)
-  viewCount  Int      @default(0)
-  authorId   String
-  author     User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  tags       Tag[]
-  createdAt  DateTime @default(now())
+  id       String    @id
+  sequence Int
+  title    String
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId String
+  comments Comment[]
 }
 
-model Tag {
-  id    String @id @default(cuid())
-  name  String @unique
-  posts Post[]
+model Comment {
+  id       String  @id
+  content  String
+  post     Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId   String
+  author   User?   @relation(fields: [authorId], references: [id])
+  authorId String?
 }

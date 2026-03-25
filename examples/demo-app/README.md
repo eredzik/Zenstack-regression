@@ -5,7 +5,17 @@ This example runs the query harness **twice**:
 1. **v2** — `@zenstackhq/runtime-v2` `createEnhancement` wrapping **Prisma** (open policy guards + `modelMeta` derived from Prisma DMMF).
 2. **v3** — `@zenstackhq/orm` **`ZenStackClient`** over **better-sqlite3** / Kysely, using the schema compiled from `zenstack/schema.zmodel`.
 
-Both sides point at the **same SQLite file** (`prisma/dev.db`). Prisma uses backtick-quoted SQL; ZenStack v3 emits Kysely SQL with double quotes — so **SQL text will not match** even when results do. The demo runs `compare` with **`--ignore-sql-diff`** so `ok` means *same JSON results, no errors* while still printing both SQL lists for inspection.
+Both sides use the **same SQLite file** (`prisma/dev.db`).
+
+## Regression dataset (nested includes + orderBy)
+
+The schema matches the **User / Post / Comment** shape used in ZenStack’s **client-api relation / order-by nested includes** tests:
+
+- Fixed ids: user `u1`, posts `p1`…`pN`, comments `c1`…`cN` (see `seed.ts`).
+- `Comment.author` is **optional**; `authorId` is **null** when `sequence % 11 === 0` (e.g. `c11`, `c22`) to stress nullable nested includes.
+- Extracted query **`regressionNestedIncludesOrderBy`** in `src/queries.ts`: `findUnique` with nested `posts` / `comments`, multiple `orderBy` arrays, and `include: { author: true }` on post comments.
+
+With current pinned versions, **JSON results may still match** while **SQL text does not** — so `npm run compare` marks rows **`ok: false`** until SQL is ignored. Use **`npm run compare:results`** for **`--ignore-sql-diff`** (parity on stable JSON + record counts only).
 
 ## Prerequisites
 
@@ -24,26 +34,23 @@ npm install
 npm run demo
 ```
 
-## What each script does
+If `prisma db push` fails because the old `dev.db` layout differs, delete `prisma/dev.db` and run `npm run db:push` again (local SQLite only).
+
+## Scripts
 
 | Script | Purpose |
 |--------|---------|
 | `zenstack:generate` | `zen generate` — refresh `zenstack/schema.ts` from `zenstack/schema.zmodel` |
 | `zenstack:v2-meta` | Build `zenstack-generated/model-meta.json` + `policy.json` from Prisma DMMF |
-| `prisma generate` | Regenerate `@prisma/client` after `schema.prisma` changes (runs inside `compare`) |
-| `build-zenstack-schema` | Compile `zenstack/schema.ts` → `zenstack/out/schema.js` for Node |
-| `build-queries` | Compile extracted `.zenstack-compare/queries.ts` |
+| `compare` | Full diff: SQL + results (`ok` requires both) |
+| `compare:results` | Same as compare but `--ignore-sql-diff` |
 
 ## Files
 
-- **`enhance-v2.mjs`** — `createEnhancement(prisma, { modelMeta, policy, prismaModule })`. `prismaModule` is the **CommonJS** `@prisma/client` export (ZenStack expects `Prisma.PrismaClientUnknownRequestError` etc.).
-- **`enhance-v3.mjs`** — `new ZenStackClient(schema, { dialect, log })`. Optional third argument `{ sqlCapture }` is filled by the compare runner to record SQL.
-- **`scripts/build-model-meta.mjs`** — Generates v2 metadata keys in **camelCase** (`user`, `post`, …) to match ZenStack’s `lowerCaseFirst` lookups.
+- **`enhance-v2.mjs`** — `createEnhancement` + open policy; `prismaModule` from CJS `@prisma/client`.
+- **`enhance-v3.mjs`** — `ZenStackClient` + optional `sqlCapture` from compare runner.
+- **`scripts/build-model-meta.mjs`** — v2 metadata keys in **camelCase** (`user`, `post`, …).
 
 ## Package version note
 
-`@zenstackhq/runtime-v2` is installed as an npm alias for `@zenstackhq/runtime@2.x` so it can sit next to v3 packages. The CLI may print a “multiple ZenStack versions” warning; that is expected here.
-
-## Strict SQL comparison
-
-Omit `--ignore-sql-diff` when both sides use the **same** query engine (e.g. two Prisma-based `enhance` wrappers) so `ok` requires identical normalized SQL strings.
+`@zenstackhq/runtime-v2` is an alias for `@zenstackhq/runtime@2.x`. The CLI may warn about multiple ZenStack versions; that is expected.

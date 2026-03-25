@@ -13,7 +13,7 @@ Use **`--ignore-sql-diff`** when comparing **Prisma + ZenStack v2 runtime** to *
 
 ## Example project
 
-See **`examples/demo-app`**: Prisma + SQLite, ZenStack v2 `createEnhancement` vs v3 `ZenStackClient`, simple and nested `db.*` queries, and `npm run demo` to extract, push schema, seed, and run `compare` with **`--ignore-sql-diff`** (still prints both SQL streams for review).
+See **`examples/demo-app`**: Prisma + SQLite, ZenStack v2 `createEnhancement` vs v3 `ZenStackClient`, including a **User/Post/Comment** regression shape (nested includes + `orderBy`, nullable comment authors). Run `npm run demo` to extract, push, seed, and compare. Default **`compare`** requires matching SQL and results; use **`compare:results`** in the example for **`--ignore-sql-diff`** when only JSON parity matters.
 
 ## Install
 
