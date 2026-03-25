@@ -1,16 +1,11 @@
 import type { PrismaClient } from "@prisma/client";
 
-/**
- * Repository holding the client. Extractor matches `db.model.method` only when the
- * root is an identifier named `db` or `prisma` — not `this.db`. Use a local:
- * `const db = this.db` before queries so extraction picks them up.
- */
+/** Repository holding the client — `this.db.post.findMany` is extracted. */
 export class PostRepository {
   constructor(private readonly db: PrismaClient) {}
 
   async listRecentForSeedUser() {
-    const db = this.db;
-    return db.post.findMany({
+    return this.db.post.findMany({
       where: { authorId: "u1" },
       orderBy: [{ sequence: "asc" }, { id: "asc" }],
       take: 8,
@@ -25,8 +20,7 @@ export class PostRepository {
   }
 
   async aggregateForSeedUser() {
-    const db = this.db;
-    return db.post.aggregate({
+    return this.db.post.aggregate({
       where: { authorId: "u1" },
       _count: { id: true },
       _sum: { sequence: true },
@@ -35,8 +29,7 @@ export class PostRepository {
   }
 
   async findPostP10WithComments() {
-    const db = this.db;
-    return db.post.findUnique({
+    return this.db.post.findUnique({
       where: { id: "p10" },
       include: {
         comments: {

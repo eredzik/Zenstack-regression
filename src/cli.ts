@@ -40,6 +40,16 @@ program
     ["db", "prisma"]
   )
   .option(
+    "--this-prop <names...>",
+    "`this.<name>` treated as client when name is listed (default: db prisma)",
+    ["db", "prisma"]
+  )
+  .option(
+    "--tx-alias <names...>",
+    "Identifier(s) treated as transaction client, e.g. tx in $transaction (default: tx)",
+    ["tx"]
+  )
+  .option(
     "--out <dir>",
     "Output directory for generated files",
     ".zenstack-compare"
@@ -49,6 +59,8 @@ program
     include: string[];
     exclude: string[];
     dbAlias: string[];
+    thisProp: string[];
+    txAlias: string[];
     out: string;
   }) => {
     const root = path.resolve(opts.root);
@@ -57,13 +69,17 @@ program
       include: opts.include,
       exclude: opts.exclude,
       dbAliases: opts.dbAlias,
+      thisPropertyNames: opts.thisProp,
+      transactionAliases: opts.txAlias,
       prismaQueryMethods: defaultPrismaQueryMethods(),
     };
     const manifest = await buildManifest(extractOpts);
     const outDir = path.isAbsolute(opts.out)
       ? opts.out
       : path.join(root, opts.out);
-    const tsPath = writeQueriesTs(outDir, manifest);
+    const tsPath = writeQueriesTs(outDir, manifest, {
+      transactionAliases: opts.txAlias,
+    });
     console.log(`Wrote ${tsPath}`);
     console.log(`Wrote ${path.join(outDir, "extract-manifest.json")}`);
     console.log(`Extracted ${manifest.queries.length} query call sites.`);

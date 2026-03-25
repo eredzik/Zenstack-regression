@@ -48,3 +48,10 @@ export async function groupPostsByAuthorEmail(db: PrismaClient) {
     _max: { sequence: true },
   });
 }
+
+/** Transaction client `tx` — generated harness wraps in `db.$transaction`. */
+export async function countUsersInTransaction(db: PrismaClient) {
+  return db.$transaction(async (tx) => {
+    return tx.user.count();
+  });
+}

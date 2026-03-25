@@ -27,8 +27,24 @@ export function defaultPrismaQueryMethods(): Set<string> {
   return new Set(DEFAULT_METHODS);
 }
 
-function isDbAlias(name: string, aliases: string[]): boolean {
-  return aliases.includes(name);
+function getClientRootSource(
+  root: ts.Expression,
+  segments: string[],
+  options: ExtractOptions
+): string | null {
+  if (ts.isIdentifier(root)) {
+    if (options.dbAliases.includes(root.text)) return root.text;
+    if (options.transactionAliases.includes(root.text)) return root.text;
+    return null;
+  }
+  // `this.db.model.method` unwinds to root `this` with segments [db, model, method]
+  if (root.kind === ts.SyntaxKind.ThisKeyword && segments.length >= 3) {
+    const prop = segments[0]!;
+    if (options.thisPropertyNames.includes(prop)) {
+      return `this.${prop}`;
+    }
+  }
+  return null;
 }
 
 function getPropertyName(
@@ -73,12 +89,24 @@ function extractCall(
   if (!chain) return null;
   const { root, segments } = chain;
   if (segments.length < 2) return null;
-  if (!ts.isIdentifier(root)) return null;
-  if (!isDbAlias(root.text, options.dbAliases)) return null;
 
-  const method = segments[segments.length - 1]!;
-  if (!options.prismaQueryMethods.has(method)) return null;
-  const model = segments[segments.length - 2]!;
+  let model: string;
+  let method: string;
+  let clientSource: string | null;
+
+  if (root.kind === ts.SyntaxKind.ThisKeyword && segments.length >= 3) {
+    clientSource = getClientRootSource(root, segments, options);
+    if (!clientSource) return null;
+    method = segments[segments.length - 1]!;
+    if (!options.prismaQueryMethods.has(method)) return null;
+    model = segments[segments.length - 2]!;
+  } else {
+    clientSource = getClientRootSource(root, segments, options);
+    if (!clientSource) return null;
+    method = segments[segments.length - 1]!;
+    if (!options.prismaQueryMethods.has(method)) return null;
+    model = segments[segments.length - 2]!;
+  }
   if (!model) return null;
 
   const argsText = node.arguments.map((a) => a.getText(sourceFile)).join(", ");
@@ -94,7 +122,7 @@ function extractCall(
     relFile,
     String(line),
     String(character),
-    root.text,
+    clientSource,
     model,
     method,
     argsText,
@@ -105,7 +133,7 @@ function extractCall(
     file: relFile.split(path.sep).join("/"),
     line: line + 1,
     column: character + 1,
-    dbAlias: root.text,
+    dbAlias: clientSource,
     model,
     method,
     arg0Source,

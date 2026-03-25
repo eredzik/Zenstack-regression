@@ -1,14 +1,11 @@
 import type { PrismaClient } from "@prisma/client";
 
-/**
- * Service class with multiple read paths. Same `const db = this.db` pattern for extraction.
- */
+/** Service class — `this.db.user.findUnique` is extracted. */
 export class UserService {
   constructor(private readonly db: PrismaClient) {}
 
   async findSeedUserByEmail() {
-    const db = this.db;
-    return db.user.findUnique({
+    return this.db.user.findUnique({
       where: { email: "u1@example.com" },
       select: {
         id: true,
@@ -19,8 +16,7 @@ export class UserService {
   }
 
   async listAllUsersOrdered() {
-    const db = this.db;
-    return db.user.findMany({
+    return this.db.user.findMany({
       orderBy: { id: "asc" },
       include: {
         posts: {

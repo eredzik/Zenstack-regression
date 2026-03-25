@@ -29,7 +29,12 @@ export interface ExtractOptions {
   root: string;
   include: string[];
   exclude: string[];
+  /** Top-level client identifiers, e.g. `db`, `prisma` */
   dbAliases: string[];
+  /** Property on `this`, e.g. `this.db` when name is in this list */
+  thisPropertyNames: string[];
+  /** Transaction client parameters, e.g. `tx` in `$transaction(async (tx) => ...)` */
+  transactionAliases: string[];
   prismaQueryMethods: Set<string>;
 }
 

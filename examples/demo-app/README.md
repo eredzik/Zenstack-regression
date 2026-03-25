@@ -10,8 +10,8 @@ Both sides use the same **`DATABASE_URL`**. The default workflow uses **PostgreS
 ## Source layout for extraction
 
 - **`src/queries.ts`** — top-level functions with a `db` parameter.
-- **`src/query-functions.ts`** — functions taking `db` plus extra parameters (signatures document the API; **query literals** are inlined so generated `queries.ts` stays valid).
-- **`src/post-repository.ts`**, **`src/user-service.ts`** — classes that hold `PrismaClient`. The extractor only matches **`db.model.method`** when the root is an identifier named **`db`** (or `prisma`), not `this.db`. Use **`const db = this.db`** inside methods before calling `db.post.findMany(...)`, etc., so those calls are extracted.
+- **`src/query-functions.ts`** — functions taking `db` plus extra parameters; includes **`db.$transaction(async (tx) => tx.user.count())`** so **`tx`** is extracted (default `--tx-alias`).
+- **`src/post-repository.ts`**, **`src/user-service.ts`** — classes using **`this.db.post.findMany(...)`** (default **`--this-prop db prisma`**).
 
 ## Regression dataset (nested includes + orderBy)
 

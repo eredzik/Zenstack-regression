@@ -4,7 +4,7 @@ CLI tooling to **mine a TypeScript codebase** for calls shaped like `db.user.fin
 
 ## What it does
 
-1. **`extract`** — Walks `*.ts` / `*.tsx`, finds member chains rooted at aliases like `db` or `prisma`, ending in known Prisma delegate methods (`findMany`, `findFirst`, `create`, …). Each site becomes `run(db) => db.<model>.<method>(<original args text>)` in `queries.ts`. All `**/*.zmodel` files under the root are listed and their contents are embedded in `extract-manifest.json` and in the generated module for audit and copy/paste into a harness repo.
+1. **`extract`** — Walks `*.ts` / `*.tsx`, finds member chains rooted at **`db` / `prisma`** (configurable), **`this.db` / `this.prisma`** (via `--this-prop`), or **transaction clients** like **`tx`** (via `--tx-alias`). Chains must end in known Prisma delegate methods (`findMany`, `findFirst`, `create`, …). Each site becomes a `run(db) => …` entry in `queries.ts`: `this.*` calls are rewritten to use the harness `db` with a cast; **`tx.*`** calls are wrapped in **`db.$transaction(async (tx) => …)`**. All `**/*.zmodel` files under the root are listed and embedded in `extract-manifest.json` and the generated module.
 2. **`compare`** — Loads your generated `queries` module, constructs one `PrismaClient` with `log: [{ level: "query", emit: "event" }]`, wraps it with `enhance` from **two different import specifiers**, runs each query twice, and prints diffs when SQL or normalized results disagree.
 
 Bare import specifiers such as `@prisma/client` are resolved from **`--cwd`** (the target project’s `node_modules`), so you can run the CLI from the repo root while comparing an example app.
@@ -35,7 +35,9 @@ zenstack-query-compare extract --root /path/to/your/app
 Useful options:
 
 - **`--include` / `--exclude`** — Extra fast-glob patterns (relative to `--root`).
-- **`--db-alias`** — Identifiers treated as the enhanced client (default: `db`, `prisma`).
+- **`--db-alias`** — Top-level identifiers treated as the client (default: `db`, `prisma`).
+- **`--this-prop`** — Property names so **`this.<name>.model.method`** is extracted (default: `db`, `prisma`).
+- **`--tx-alias`** — Names for interactive transaction clients; **`tx.model.method`** becomes **`db.$transaction(async (tx) => tx.model.method(...))`** in the harness (default: `tx`).
 - **`--out`** — Output directory (default: `.zenstack-compare` under the root).
 
 Outputs:
