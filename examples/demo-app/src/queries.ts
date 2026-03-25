@@ -30,13 +30,54 @@ export async function complexNestedInclude(db: PrismaClient) {
     include: {
       posts: {
         where: { published: true },
-        orderBy: { viewCount: "desc" },
+        orderBy: [{ viewCount: "desc" }, { createdAt: "asc" }],
         take: 2,
-        include: { tags: { orderBy: { name: "asc" } } },
+        include: {
+          tags: { orderBy: [{ name: "asc" }, { id: "asc" }] },
+        },
       },
     },
-    orderBy: { email: "asc" },
+    orderBy: [{ email: "asc" }, { id: "asc" }],
     take: 5,
+  });
+}
+
+/** Nested read: posts → author + tags, each level with explicit ordering. */
+export async function nestedPostsOrderedWithRelations(db: PrismaClient) {
+  return db.post.findMany({
+    where: { published: true },
+    orderBy: [{ viewCount: "desc" }, { title: "asc" }],
+    take: 6,
+    include: {
+      author: {
+        select: { id: true, email: true, name: true, role: true },
+      },
+      tags: {
+        orderBy: [{ name: "desc" }],
+        select: { id: true, name: true },
+      },
+    },
+  });
+}
+
+/** Deep nesting: users → ordered posts → ordered tags (many-to-many path). */
+export async function nestedUsersPostsTagsOrdered(db: PrismaClient) {
+  return db.user.findMany({
+    where: { email: { contains: "@" } },
+    orderBy: [{ role: "desc" }, { createdAt: "asc" }],
+    take: 8,
+    include: {
+      posts: {
+        orderBy: [{ published: "desc" }, { viewCount: "asc" }, { title: "asc" }],
+        take: 5,
+        include: {
+          tags: {
+            orderBy: [{ name: "asc" }],
+            take: 10,
+          },
+        },
+      },
+    },
   });
 }
 
