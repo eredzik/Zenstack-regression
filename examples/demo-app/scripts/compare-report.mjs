@@ -66,13 +66,6 @@ if (issues.length === 0) {
   process.exit(0);
 }
 
-console.log("");
-for (const { id, details } of issues) {
-  const loc = idToFile.get(id) ?? "?";
-  console.log(`- ${id}  (${loc})`);
-  console.log(`  ${details}`);
-}
-
 const mismatchJson = rows.filter((r) => !r.resultsMatch && !r.errorV2 && !r.errorV3);
 const sqlOnly = rows.filter(
   (r) =>
@@ -81,6 +74,23 @@ const sqlOnly = rows.filter(
     !r.errorV2 &&
     !r.errorV3
 );
+
+if (mismatchJson.length) {
+  console.log("");
+  console.log("--- JSON payload mismatch (v2 vs v3) — highest priority ---");
+  for (const r of mismatchJson) {
+    const loc = idToFile.get(r.id) ?? "?";
+    console.log(`- ${r.id}  (${loc})`);
+  }
+}
+
+console.log("");
+console.log("--- All issues (id + location + detail) ---");
+for (const { id, details } of issues) {
+  const loc = idToFile.get(id) ?? "?";
+  console.log(`- ${id}  (${loc})`);
+  console.log(`  ${details}`);
+}
 
 console.log("");
 console.log("--- Breakdown ---");

@@ -3,7 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 /**
  * Regression: nested includes + orderBy (nullable nested relation on Comment.author).
  * Known to diverge between ZenStack v2 (Prisma) and v3 ORM for some orderings.
- * Data is seeded in seed.ts (u1, posts p1..pN, comments c1..cN).
+ * Data is seeded in seed.ts (scaled u1 posts/comments + extra users).
  */
 
 /** Mirrors client-api relation / order-by nested includes style queries. */

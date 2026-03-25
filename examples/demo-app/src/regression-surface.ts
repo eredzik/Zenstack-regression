@@ -6,42 +6,48 @@ import type { PrismaClient } from "@prisma/client";
  * Requires seed.ts data (u1 + posts; u2 optional).
  */
 
-/** Nested include + orderBy on user.comments (string sort on `content`). */
+/** Nested include + orderBy on user.comments (string sort: C9 vs C100 vs "alpha"). */
 export async function nestedUserCommentsOrderByContent(db: PrismaClient) {
   return db.user.findUnique({
     where: { id: "u1" },
     include: {
       comments: {
         orderBy: { content: "desc" },
-        take: 25,
+        take: 60,
         include: { post: { select: { id: true, title: true } } },
       },
     },
   });
 }
 
-/** Scalar OR on Post — simple boolean form. */
+/** Scalar OR on Post — simple boolean form (u1 scale: high sequences + p1). */
 export async function postsWhereOrSequence(db: PrismaClient) {
   return db.post.findMany({
     where: {
-      OR: [{ sequence: { gte: 20 } }, { id: "p1" }],
+      OR: [{ sequence: { gte: 100 } }, { id: "p1" }],
     },
     orderBy: { sequence: "asc" },
     select: { id: true, sequence: true, title: true },
   });
 }
 
-/** AND of two OR groups (posts). */
+/** AND of two OR groups (posts) — straddles lexicographic title edge cases. */
 export async function postsWhereAndOfOr(db: PrismaClient) {
   return db.post.findMany({
     where: {
       AND: [
-        { OR: [{ sequence: { lte: 3 } }, { sequence: { gte: 20 } }] },
-        { OR: [{ title: { startsWith: "P" } }, { id: "p22" }] },
+        { OR: [{ sequence: { lte: 3 } }, { sequence: { gte: 115 } }] },
+        {
+          OR: [
+            { title: { startsWith: "T-u1-" } },
+            { id: "p22" },
+            { id: "p100" },
+          ],
+        },
       ],
     },
     orderBy: { sequence: "asc" },
-    take: 15,
+    take: 25,
     select: { id: true, sequence: true },
   });
 }
@@ -58,14 +64,14 @@ export async function usersWherePostsNoneLowSequence(db: PrismaClient) {
   });
 }
 
-/** Comment: OR on nullable scalar + content filter. */
+/** Comment: OR on nullable scalar + content filter (large overlap on `C2*`). */
 export async function commentsWhereOrNullOrPrefix(db: PrismaClient) {
   return db.comment.findMany({
     where: {
       OR: [{ authorId: null }, { content: { startsWith: "C2" } }],
     },
     orderBy: { id: "asc" },
-    take: 30,
+    take: 80,
     select: { id: true, content: true, authorId: true },
   });
 }
