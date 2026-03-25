@@ -7,6 +7,12 @@ This example runs the query harness **twice**:
 
 Both sides use the same **`DATABASE_URL`**. The default workflow uses **PostgreSQL in Docker** (`docker compose`); set `DATABASE_URL` (see `.env.example`). If `DATABASE_URL` is a `file:` URL or unset, v3 falls back to **SQLite** in `enhance-v3.mjs` while Prisma still follows `schema.prisma` — use Postgres for the full demo.
 
+## Source layout for extraction
+
+- **`src/queries.ts`** — top-level functions with a `db` parameter.
+- **`src/query-functions.ts`** — functions taking `db` plus extra parameters (signatures document the API; **query literals** are inlined so generated `queries.ts` stays valid).
+- **`src/post-repository.ts`**, **`src/user-service.ts`** — classes that hold `PrismaClient`. The extractor only matches **`db.model.method`** when the root is an identifier named **`db`** (or `prisma`), not `this.db`. Use **`const db = this.db`** inside methods before calling `db.post.findMany(...)`, etc., so those calls are extracted.
+
 ## Regression dataset (nested includes + orderBy)
 
 The schema matches the **User / Post / Comment** shape used in ZenStack’s **client-api relation / order-by nested includes** tests:
@@ -45,6 +51,8 @@ npm run extract && npm run db:push && npm run db:seed && npm run compare
 ```
 
 Port **5433** avoids clashing with a local Postgres on 5432.
+
+If **`docker` is not installed**, use any PostgreSQL 16 instance and set `DATABASE_URL` (for example local `postgresql://demo:demo@127.0.0.1:5432/zenstack_compare_demo` after creating user/db).
 
 ## Scripts
 
