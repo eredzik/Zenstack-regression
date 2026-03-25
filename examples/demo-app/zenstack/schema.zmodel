@@ -1,12 +1,6 @@
-// ZenStack-style schema mirror (for extraction demo). Prisma source of truth is prisma/schema.prisma.
-
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL")
-}
-
-generator client {
-  provider = "prisma-client-js"
+  url      = "file:../prisma/dev.db"
 }
 
 model User {

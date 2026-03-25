@@ -4,20 +4,30 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "postinstall": "prisma generate",
+    "postinstall": "prisma generate && node scripts/build-model-meta.mjs",
+    "zenstack:generate": "zen generate --schema zenstack/schema.zmodel -o zenstack --silent",
+    "zenstack:v2-meta": "node scripts/build-model-meta.mjs",
+    "build-zenstack-schema": "tsc -p tsconfig.zenstack.json",
     "extract": "node ../../dist/cli.js extract --root . --exclude \"**/seed.ts\"",
     "build-queries": "tsc -p tsconfig.queries.json",
     "db:push": "prisma db push",
     "db:seed": "tsx seed.ts",
-    "compare": "npm run build-queries && node ../../dist/cli.js compare --cwd . --queries-module ./.zenstack-compare/out/queries.js --enhance-v2 ./enhance-identical.mjs --enhance-v3 ./enhance-identical.mjs --json",
+    "compare": "npm run zenstack:generate && npm run zenstack:v2-meta && prisma generate && npm run build-zenstack-schema && npm run build-queries && node ../../dist/cli.js compare --cwd . --queries-module ./.zenstack-compare/out/queries.js --enhance-v2 ./enhance-v2.mjs --enhance-v3 ./enhance-v3.mjs --ignore-sql-diff --json",
     "demo": "npm run extract && npm run db:push && npm run db:seed && npm run compare"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0"
   },
   "devDependencies": {
+    "@zenstackhq/cli": "^3.5.1",
+    "@zenstackhq/orm": "^3.5.1",
+    "@zenstackhq/runtime-v2": "npm:@zenstackhq/runtime@^2.22.1",
+    "@zenstackhq/schema": "^3.5.1",
+    "better-sqlite3": "^12.8.0",
+    "kysely": "^0.28.14",
     "prisma": "^6.5.0",
     "tsx": "^4.19.3",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "zod": "^4.3.6"
   }
 }

@@ -108,7 +108,7 @@ export async function runCompare(options: CompareOptions): Promise<CompareRow[]>
     enhance: (
       prisma: unknown,
       ctx?: unknown,
-      opts?: unknown
+      opts?: { sqlCapture?: string[] }
     ) => Record<string, unknown>;
   };
 
@@ -127,9 +127,10 @@ export async function runCompare(options: CompareOptions): Promise<CompareRow[]>
     log: [{ level: "query", emit: "event" }],
   });
 
-  const sqlCapture: string[] = [];
+  /** Prisma query log for the current "v2" side (enhanced Prisma). */
+  const sqlCaptureV2: string[] = [];
   prisma.$on("query", (e: unknown) => {
-    sqlCapture.push(prismaQueryFromEvent(e));
+    sqlCaptureV2.push(prismaQueryFromEvent(e));
   });
 
   await prisma.$connect();
@@ -161,18 +162,20 @@ export async function runCompare(options: CompareOptions): Promise<CompareRow[]>
 
     try {
       const db2 = enhanceV2.enhance(prisma, undefined, undefined) as unknown;
-      sqlCapture.length = 0;
+      sqlCaptureV2.length = 0;
       resultV2 = await bundle.run(db2);
-      sqlV2.push(...sqlCapture);
+      sqlV2.push(...sqlCaptureV2);
     } catch (e) {
       errorV2 = e instanceof Error ? e.message : String(e);
     }
 
     try {
-      const db3 = enhanceV3.enhance(prisma, undefined, undefined) as unknown;
-      sqlCapture.length = 0;
+      const sqlCaptureV3: string[] = [];
+      const db3 = enhanceV3.enhance(prisma, undefined, {
+        sqlCapture: sqlCaptureV3,
+      }) as unknown;
       resultV3 = await bundle.run(db3);
-      sqlV3.push(...sqlCapture);
+      sqlV3.push(...sqlCaptureV3);
     } catch (e) {
       errorV3 = e instanceof Error ? e.message : String(e);
     }
@@ -182,7 +185,10 @@ export async function runCompare(options: CompareOptions): Promise<CompareRow[]>
     const resultsMatch =
       errorV2 === null && errorV3 === null && resultV2Json === resultV3Json;
     const sqlMatch = normalizeSql(sqlV2) === normalizeSql(sqlV3);
-    const ok = resultsMatch && sqlMatch && errorV2 === null && errorV3 === null;
+    const noErrors = errorV2 === null && errorV3 === null;
+    const ok = options.ignoreSqlDiff
+      ? resultsMatch && noErrors
+      : resultsMatch && sqlMatch && noErrors;
 
     rows.push({
       id,

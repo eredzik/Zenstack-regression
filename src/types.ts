@@ -41,4 +41,9 @@ export interface CompareOptions {
   prismaClientSpecifier: string;
   queryIds?: string[];
   json: boolean;
+  /**
+   * When true, `ok` only requires matching results and no errors (SQL strings may differ).
+   * Use when comparing Prisma-based v2 vs Kysely-based v3 where SQL text is never identical.
+   */
+  ignoreSqlDiff?: boolean;
 }

@@ -108,6 +108,11 @@ program
     "@zenstackhq/runtime"
   )
   .option("--query-id <ids...>", "Only run specific extracted query id(s)")
+  .option(
+    "--ignore-sql-diff",
+    "Treat rows as OK when results match and both sides have no errors, even if SQL text differs",
+    false
+  )
   .option("--json", "Print machine-readable JSON", false)
   .action(async (opts: {
     queriesModule: string;
@@ -116,6 +121,7 @@ program
     enhanceV2: string;
     enhanceV3: string;
     queryId?: string[];
+    ignoreSqlDiff: boolean;
     json: boolean;
   }) => {
     const cwd = path.resolve(opts.cwd);
@@ -133,6 +139,7 @@ program
       enhanceV3Module: enhanceV3,
       prismaClientSpecifier,
       queryIds: opts.queryId,
+      ignoreSqlDiff: opts.ignoreSqlDiff,
       json: opts.json,
     });
   });

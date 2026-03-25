@@ -9,9 +9,11 @@ CLI tooling to **mine a TypeScript codebase** for calls shaped like `db.user.fin
 
 Bare import specifiers such as `@prisma/client` are resolved from **`--cwd`** (the target project’s `node_modules`), so you can run the CLI from the repo root while comparing an example app.
 
+Use **`--ignore-sql-diff`** when comparing **Prisma + ZenStack v2 runtime** to **ZenStack v3 ORM** (Kysely): JSON results can match while SQL text will not. The v3 `enhance` module may accept a third argument `{ sqlCapture: string[] }` (the compare runner supplies this when present).
+
 ## Example project
 
-See **`examples/demo-app`**: Prisma + SQLite, simple and nested `db.*` queries, `schema.zmodel`, and `npm run demo` to extract, push schema, seed, and run `compare` (using identical pass-through `enhance` modules). Swap those for real ZenStack v2/v3 wrappers to diff behavior.
+See **`examples/demo-app`**: Prisma + SQLite, ZenStack v2 `createEnhancement` vs v3 `ZenStackClient`, simple and nested `db.*` queries, and `npm run demo` to extract, push schema, seed, and run `compare` with **`--ignore-sql-diff`** (still prints both SQL streams for review).
 
 ## Install
 
@@ -49,7 +51,7 @@ Outputs:
 
 ## Compare
 
-Run from a project that already has **`@prisma/client`**, a generated client, and **`DATABASE_URL`** set:
+Run from a project that already has **`@prisma/client`**, a generated client, and a reachable database (set **`DATABASE_URL`** or use a `file:` URL in `schema.prisma`).
 
 ```bash
 zenstack-query-compare compare \
@@ -57,8 +59,11 @@ zenstack-query-compare compare \
   --queries-module ./.zenstack-compare/queries.ts \
   --prisma-client @prisma/client \
   --enhance-v2 /path/to/enhance-v2.mjs \
-  --enhance-v3 /path/to/enhance-v3.mjs
+  --enhance-v3 /path/to/enhance-v3.mjs \
+  --ignore-sql-diff
 ```
+
+Omit **`--ignore-sql-diff`** when both sides emit comparable SQL (e.g. two Prisma-based clients).
 
 Each of `--enhance-v2` / `--enhance-v3` should resolve to a module that exports **`enhance`** with the same shape you use in production (typically `enhance(prisma, userContext, options)`). If v2 and v3 live under the same package name, use **two small wrapper files** that re-export the correct build:
 
