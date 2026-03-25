@@ -7,6 +7,12 @@ CLI tooling to **mine a TypeScript codebase** for calls shaped like `db.user.fin
 1. **`extract`** — Walks `*.ts` / `*.tsx`, finds member chains rooted at aliases like `db` or `prisma`, ending in known Prisma delegate methods (`findMany`, `findFirst`, `create`, …). Each site becomes `run(db) => db.<model>.<method>(<original args text>)` in `queries.ts`. All `**/*.zmodel` files under the root are listed and their contents are embedded in `extract-manifest.json` and in the generated module for audit and copy/paste into a harness repo.
 2. **`compare`** — Loads your generated `queries` module, constructs one `PrismaClient` with `log: [{ level: "query", emit: "event" }]`, wraps it with `enhance` from **two different import specifiers**, runs each query twice, and prints diffs when SQL or normalized results disagree.
 
+Bare import specifiers such as `@prisma/client` are resolved from **`--cwd`** (the target project’s `node_modules`), so you can run the CLI from the repo root while comparing an example app.
+
+## Example project
+
+See **`examples/demo-app`**: Prisma + SQLite, simple and nested `db.*` queries, `schema.zmodel`, and `npm run demo` to extract, push schema, seed, and run `compare` (using identical pass-through `enhance` modules). Swap those for real ZenStack v2/v3 wrappers to diff behavior.
+
 ## Install
 
 From this repository:
@@ -90,6 +96,6 @@ await runCompare({
 3. In CI or locally, migrate/seed a database, then run **`compare`** with your v2 vs v3 `enhance` entrypoints.
 4. Treat mismatches as regressions; use `--query-id` to bisect.
 
-## Fixture
+## Fixtures
 
-See `fixtures/sample-app` for a minimal tree used to sanity-check extraction.
+See `fixtures/sample-app` for a minimal tree used to sanity-check extraction (no database).

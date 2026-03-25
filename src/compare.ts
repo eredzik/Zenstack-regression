@@ -1,3 +1,6 @@
+import path from "node:path";
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import type { CompareOptions } from "./types.js";
 
 export type CompareRow = {
@@ -53,22 +56,55 @@ function prismaQueryFromEvent(e: unknown): string {
   return String(e);
 }
 
+/** Resolve imports from the target project (--cwd) so @prisma/client loads from example app node_modules. */
+async function importFromProject(
+  specifier: string,
+  cwd: string
+): Promise<unknown> {
+  if (specifier.startsWith("file:")) {
+    return import(specifier);
+  }
+  if (
+    specifier.startsWith(".") ||
+    path.isAbsolute(specifier) ||
+    /^[a-zA-Z]:[\\/]/.test(specifier)
+  ) {
+    const abs = path.isAbsolute(specifier)
+      ? specifier
+      : path.resolve(cwd, specifier);
+    return import(pathToFileURL(abs).href);
+  }
+  const req = createRequire(path.join(cwd, "package.json"));
+  const resolved = req.resolve(specifier);
+  return import(pathToFileURL(resolved).href);
+}
+
 export async function runCompare(options: CompareOptions): Promise<CompareRow[]> {
-  const prismaMod = await import(options.prismaClientSpecifier);
+  const cwd = path.resolve(options.cwd);
+  const prismaMod = (await importFromProject(
+    options.prismaClientSpecifier,
+    cwd
+  )) as { PrismaClient: new (args?: object) => unknown };
   const PrismaClient = prismaMod.PrismaClient as new (args?: object) => {
     $connect: () => Promise<void>;
     $disconnect: () => Promise<void>;
     $on: (event: string, cb: (e: unknown) => void) => void;
   };
 
-  const enhanceV2 = (await import(options.enhanceV2Module)) as {
+  const enhanceV2 = (await importFromProject(
+    options.enhanceV2Module,
+    cwd
+  )) as {
     enhance: (
       prisma: unknown,
       ctx?: unknown,
       opts?: unknown
     ) => Record<string, unknown>;
   };
-  const enhanceV3 = (await import(options.enhanceV3Module)) as {
+  const enhanceV3 = (await importFromProject(
+    options.enhanceV3Module,
+    cwd
+  )) as {
     enhance: (
       prisma: unknown,
       ctx?: unknown,
@@ -76,7 +112,7 @@ export async function runCompare(options: CompareOptions): Promise<CompareRow[]>
     ) => Record<string, unknown>;
   };
 
-  const queriesMod = (await import(options.queriesModule)) as {
+  const queriesMod = (await importFromProject(options.queriesModule, cwd)) as {
     zenstackCompareQueries: Record<
       string,
       { meta: { id: string }; run: (db: unknown) => Promise<unknown> }

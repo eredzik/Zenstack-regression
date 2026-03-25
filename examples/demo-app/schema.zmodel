@@ -1,0 +1,37 @@
+// ZenStack-style schema mirror (for extraction demo). Prisma source of truth is prisma/schema.prisma.
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  role      String   @default("member")
+  posts     Post[]
+  createdAt DateTime @default(now())
+}
+
+model Post {
+  id         String   @id @default(cuid())
+  title      String
+  body       String?
+  published  Boolean  @default(false)
+  viewCount  Int      @default(0)
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  tags       Tag[]
+  createdAt  DateTime @default(now())
+}
+
+model Tag {
+  id    String @id @default(cuid())
+  name  String @unique
+  posts Post[]
+}

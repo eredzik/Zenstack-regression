@@ -1,0 +1,23 @@
+{
+  "name": "zenstack-query-compare-demo-app",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "postinstall": "prisma generate",
+    "extract": "node ../../dist/cli.js extract --root . --exclude \"**/seed.ts\"",
+    "build-queries": "tsc -p tsconfig.queries.json",
+    "db:push": "prisma db push",
+    "db:seed": "tsx seed.ts",
+    "compare": "npm run build-queries && node ../../dist/cli.js compare --cwd . --queries-module ./.zenstack-compare/out/queries.js --enhance-v2 ./enhance-identical.mjs --enhance-v3 ./enhance-identical.mjs --json",
+    "demo": "npm run extract && npm run db:push && npm run db:seed && npm run compare"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.5.0"
+  },
+  "devDependencies": {
+    "prisma": "^6.5.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3"
+  }
+}
