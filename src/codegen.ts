@@ -9,12 +9,9 @@ function zmodelBundleLiteral(manifest: ExtractManifest): string {
 
 /** Expression for the client that performs the call (inside generated `run`). */
 function emitInnerClientRef(dbAlias: string): string {
+  // `this.db` / `this.prisma` in app code — harness passes the same client as `db`.
   if (dbAlias.startsWith("this.")) {
-    const prop = dbAlias.slice("this.".length);
-    if (!/^[a-zA-Z_$][\w$]*$/.test(prop)) {
-      return "db";
-    }
-    return `(db as unknown as { ${prop}: typeof db }).${prop}`;
+    return "db";
   }
   if (dbAlias === "prisma") return "db";
   return dbAlias;

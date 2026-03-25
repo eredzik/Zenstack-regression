@@ -5,7 +5,7 @@
 
 /* eslint-disable */
 
-import { type SchemaDef, type AttributeApplication, ExpressionUtils } from "@zenstackhq/schema";
+import { type SchemaDef, type AttributeApplication, type FieldDefault, ExpressionUtils } from "@zenstackhq/schema";
 export class SchemaType implements SchemaDef {
     provider = {
         type: "postgresql"
@@ -61,6 +61,12 @@ export class SchemaType implements SchemaDef {
                 title: {
                     name: "title",
                     type: "String"
+                },
+                published: {
+                    name: "published",
+                    type: "Boolean",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal(false) }] }] as readonly AttributeApplication[],
+                    default: false as FieldDefault
                 },
                 author: {
                     name: "author",

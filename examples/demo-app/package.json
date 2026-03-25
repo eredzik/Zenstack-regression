@@ -14,6 +14,7 @@
     "db:seed": "tsx seed.ts",
     "compare": "npm run zenstack:generate && npm run zenstack:v2-meta && prisma generate && npm run build-zenstack-schema && npm run build-queries && node ../../dist/cli.js compare --cwd . --queries-module ./.zenstack-compare/out/queries.js --enhance-v2 ./enhance-v2.mjs --enhance-v3 ./enhance-v3.mjs --json",
     "compare:results": "npm run zenstack:generate && npm run zenstack:v2-meta && prisma generate && npm run build-zenstack-schema && npm run build-queries && node ../../dist/cli.js compare --cwd . --queries-module ./.zenstack-compare/out/queries.js --enhance-v2 ./enhance-v2.mjs --enhance-v3 ./enhance-v3.mjs --ignore-sql-diff --json",
+    "compare:report": "npm run zenstack:generate && npm run zenstack:v2-meta && prisma generate && npm run build-zenstack-schema && npm run build-queries && node scripts/compare-report.mjs",
     "demo": "npm run extract && npm run db:push && npm run db:seed && npm run compare",
     "postgres:up": "docker compose up -d postgres",
     "postgres:wait": "node scripts/wait-for-postgres.mjs",

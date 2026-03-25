@@ -233,6 +233,10 @@ export async function runCompare(options: CompareOptions): Promise<CompareRow[]>
 
   await prisma.$disconnect();
 
+  if (options.silent) {
+    return rows;
+  }
+
   if (!options.json) {
     for (const r of rows) {
       const status = r.ok ? "OK" : "DIFF";

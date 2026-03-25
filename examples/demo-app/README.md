@@ -62,6 +62,9 @@ If **`docker` is not installed**, use any PostgreSQL 16 instance and set `DATABA
 | `zenstack:v2-meta` | Build `zenstack-generated/model-meta.json` + `policy.json` from Prisma DMMF |
 | `compare` | Full diff: SQL + results (`ok` requires both) |
 | `compare:results` | Same as compare but `--ignore-sql-diff` |
+| `compare:report` | Strict compare + human summary with file:line per query id |
+
+Extra regression-style queries (nested orderBy, **AND**/**OR**/**NOT**, relation filters, aggregates) are in **`src/regression-surface.ts`**. See **`COMPARE_REPORT.md`** for how to regenerate a summary.
 
 ## Files
 

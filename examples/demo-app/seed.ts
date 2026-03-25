@@ -52,6 +52,13 @@ async function main() {
     data: makeCommentsData(REGRESSION_POST_COUNT),
   });
 
+  await prisma.user.create({
+    data: {
+      id: "u2",
+      email: "u2@example.org",
+    },
+  });
+
   console.log(
     "Seeded regression dataset: u1 +",
     REGRESSION_POST_COUNT,

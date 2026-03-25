@@ -51,4 +51,6 @@ export interface CompareOptions {
    * Use when comparing Prisma-based v2 vs Kysely-based v3 where SQL text is never identical.
    */
   ignoreSqlDiff?: boolean;
+  /** Skip printing to stdout (for programmatic use). */
+  silent?: boolean;
 }
