@@ -26,6 +26,20 @@ const queriesModule = pathToFileURL(
   path.join(appRoot, ".zenstack-compare", "out", "queries.js")
 ).href;
 
+const fixturesPath =
+  process.env.ZS_FIXTURES ??
+  (fs.existsSync(path.join(appRoot, ".zenstack-compare", "query-fixtures.json"))
+    ? ".zenstack-compare/query-fixtures.json"
+    : undefined);
+let queryFixtures;
+if (fixturesPath) {
+  const abs = path.isAbsolute(fixturesPath)
+    ? fixturesPath
+    : path.join(appRoot, fixturesPath);
+  const doc = JSON.parse(fs.readFileSync(abs, "utf8"));
+  queryFixtures = doc.queries;
+}
+
 const rows = await runCompare({
   cwd: appRoot,
   queriesModule,
@@ -34,6 +48,7 @@ const rows = await runCompare({
   prismaClientSpecifier: "@prisma/client",
   json: false,
   silent: true,
+  queryFixtures,
 });
 
 const issues = [];

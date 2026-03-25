@@ -32,6 +32,10 @@ Use the CLI via `node dist/cli.js` or `npm link` / `npx` after publishing.
 zenstack-query-compare extract --root /path/to/your/app
 ```
 
+**`fixtures-template`** — build a JSON skeleton from **`extract-manifest.json`** for per-query argument patches.
+
+**`seed-faker`** — emit **`seed-faker.generated.ts`** in the target project from Prisma DMMF + **`@faker-js/faker`** (run with **`npx tsx`** after **`npm i -D @faker-js/faker`**).
+
 Useful options:
 
 - **`--include` / `--exclude`** — Extra fast-glob patterns (relative to `--root`).
@@ -62,8 +66,11 @@ zenstack-query-compare compare \
   --prisma-client @prisma/client \
   --enhance-v2 /path/to/enhance-v2.mjs \
   --enhance-v3 /path/to/enhance-v3.mjs \
+  --fixtures ./query-fixtures.json \
   --ignore-sql-diff
 ```
+
+**`--fixtures`** — JSON file **`{ "queries": { "<id>": { "where": { ... } } } }`** merged into each extracted call’s first argument (deep merge).
 
 Omit **`--ignore-sql-diff`** when both sides emit comparable SQL (e.g. two Prisma-based clients).
 

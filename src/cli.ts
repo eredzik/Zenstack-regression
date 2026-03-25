@@ -5,6 +5,11 @@ import { Command } from "commander";
 import { buildManifest, defaultPrismaQueryMethods } from "./extract.js";
 import { writeQueriesTs } from "./codegen.js";
 import { runCompare } from "./compare.js";
+import { loadQueryFixtures, writeFixturesTemplate } from "./fixtures.js";
+import {
+  generateFakerSeedScriptFromDmmf,
+  loadDmmfModels,
+} from "./seed-faker.js";
 import type { ExtractOptions } from "./types.js";
 
 function toImportUrl(spec: string, cwd: string): string {
@@ -129,6 +134,10 @@ program
     "Treat rows as OK when results match and both sides have no errors, even if SQL text differs",
     false
   )
+  .option(
+    "--fixtures <file>",
+    "JSON file: { queries: { [queryId]: { where: {...} } }, fakerSeed? } merged into each extracted call"
+  )
   .option("--json", "Print machine-readable JSON", false)
   .action(async (opts: {
     queriesModule: string;
@@ -138,6 +147,7 @@ program
     enhanceV3: string;
     queryId?: string[];
     ignoreSqlDiff: boolean;
+    fixtures?: string;
     json: boolean;
   }) => {
     const cwd = path.resolve(opts.cwd);
@@ -147,6 +157,7 @@ program
     const prismaClientSpecifier = opts.prismaClient.startsWith(".")
       ? toImportUrl(opts.prismaClient, cwd)
       : opts.prismaClient;
+    const queryFixtures = loadQueryFixtures(opts.fixtures);
 
     await runCompare({
       cwd,
@@ -157,7 +168,59 @@ program
       queryIds: opts.queryId,
       ignoreSqlDiff: opts.ignoreSqlDiff,
       json: opts.json,
+      queryFixtures,
     });
+  });
+
+program
+  .command("fixtures-template")
+  .description(
+    "Write query-fixtures.template.json from extract-manifest.json (null placeholders per query id)"
+  )
+  .requiredOption("--manifest <file>", "Path to extract-manifest.json")
+  .option(
+    "--out <file>",
+    "Output JSON path",
+    "query-fixtures.template.json"
+  )
+  .action((opts: { manifest: string; out: string }) => {
+    writeFixturesTemplate(opts.manifest, opts.out);
+    console.log(`Wrote ${path.resolve(opts.out)}`);
+  });
+
+program
+  .command("seed-faker")
+  .description(
+    "Emit .zenstack-compare/seed-faker.generated.ts from Prisma DMMF (run with npx tsx in target project; requires @faker-js/faker)"
+  )
+  .requiredOption("--cwd <dir>", "Project with prisma generate and @prisma/client")
+  .option(
+    "--out <file>",
+    "Output path",
+    ".zenstack-compare/seed-faker.generated.ts"
+  )
+  .option("--records <n>", "Rows per model", "5")
+  .option("--seed <n>", "faker.seed()", "42")
+  .action(async (opts: {
+    cwd: string;
+    out: string;
+    records: string;
+    seed: string;
+  }) => {
+    const cwd = path.resolve(opts.cwd);
+    const models = loadDmmfModels(cwd);
+    const src = generateFakerSeedScriptFromDmmf({
+      models,
+      recordsPerModel: parseInt(opts.records, 10) || 5,
+      fakerSeed: parseInt(opts.seed, 10) || 42,
+    });
+    const outAbs = path.isAbsolute(opts.out)
+      ? opts.out
+      : path.join(cwd, opts.out);
+    const fs = await import("node:fs");
+    fs.mkdirSync(path.dirname(outAbs), { recursive: true });
+    fs.writeFileSync(outAbs, src, "utf8");
+    console.log(`Wrote ${outAbs}`);
   });
 
 program.parseAsync(process.argv).catch((err) => {

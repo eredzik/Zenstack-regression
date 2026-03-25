@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { ExtractManifest, ExtractedQuery } from "./types.js";
+import { mergeQueryArgsInlineSource } from "./merge.js";
 
 function zmodelBundleLiteral(manifest: ExtractManifest): string {
   const contents = manifest.zmodelContents ?? {};
@@ -32,10 +33,14 @@ function buildRunnerBody(
 ): string {
   const inner = emitInnerClientRef(q.dbAlias);
   const args = q.argsSource.trim();
-  const call =
-    args.length === 0 ?
-      `${inner}.${q.model}.${q.method}()`
-    : `${inner}.${q.model}.${q.method}(${args})`;
+  const hasArgs = args.length > 0;
+  const argExpr = hasArgs
+    ? `__mergeQueryArgs(${args}, queryArgs ?? {}) as never`
+    : "";
+
+  const call = hasArgs
+    ? `${inner}.${q.model}.${q.method}(${argExpr})`
+    : `${inner}.${q.model}.${q.method}()`;
 
   if (needsTransactionWrapper(q.dbAlias, transactionAliases)) {
     const param = q.dbAlias;
@@ -65,10 +70,14 @@ export function generateQueriesModule(
       model: q.model,
       method: q.method,
     };
-    return `  ${JSON.stringify(q.id)}: {\n    meta: ${JSON.stringify(meta, null, 2).replace(/\n/g, "\n    ")},\n    run: async (db) => {\n      ${body}\n    },\n  }`;
+    return `  ${JSON.stringify(q.id)}: {\n    meta: ${JSON.stringify(meta, null, 2).replace(/\n/g, "\n    ")},\n    run: async (db, queryArgs) => {\n      ${body}\n    },\n  }`;
   });
 
+  const mergeFn = mergeQueryArgsInlineSource();
+
   return `${header}
+
+${mergeFn}
 
 /** Minimal db shape: ZenStack-enhanced client (same surface as Prisma delegate API). */
 export type ZenstackCompareDb = Record<string, Record<string, (...args: unknown[]) => Promise<unknown>>>;
@@ -83,9 +92,10 @@ export type QueryMeta = {
   method: string;
 };
 
+/** Optional deep-merge into the extracted call's first argument (where / data / etc.). */
 export type QueryBundle = {
   meta: QueryMeta;
-  run: (db: ZenstackCompareDb) => Promise<unknown>;
+  run: (db: ZenstackCompareDb, queryArgs?: Record<string, unknown>) => Promise<unknown>;
 };
 
 export const zenstackCompareQueries: Record<string, QueryBundle> = {

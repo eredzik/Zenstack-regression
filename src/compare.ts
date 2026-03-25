@@ -131,11 +131,20 @@ export async function runCompare(options: CompareOptions): Promise<CompareRow[]>
   const queriesMod = (await importFromProject(options.queriesModule, cwd)) as {
     zenstackCompareQueries: Record<
       string,
-      { meta: { id: string }; run: (db: unknown) => Promise<unknown> }
+      {
+        meta: { id: string };
+        run: (
+          db: unknown,
+          queryArgs?: Record<string, unknown>
+        ) => Promise<unknown>;
+      }
     >;
     zenstackCompareQueryList: Array<{
       meta: { id: string };
-      run: (db: unknown) => Promise<unknown>;
+      run: (
+        db: unknown,
+        queryArgs?: Record<string, unknown>
+      ) => Promise<unknown>;
     }>;
   };
 
@@ -152,9 +161,14 @@ export async function runCompare(options: CompareOptions): Promise<CompareRow[]>
   await prisma.$connect();
 
   const rows: CompareRow[] = [];
+  const fixtures = options.queryFixtures ?? {};
+
   const list: Array<{
     meta: { id: string };
-    run: (db: unknown) => Promise<unknown>;
+    run: (
+      db: unknown,
+      queryArgs?: Record<string, unknown>
+    ) => Promise<unknown>;
   }> = [];
 
   if (options.queryIds?.length) {
@@ -176,10 +190,12 @@ export async function runCompare(options: CompareOptions): Promise<CompareRow[]>
     let resultV2: unknown;
     let resultV3: unknown;
 
+    const queryArgs = fixtures[id];
+
     try {
       const db2 = enhanceV2.enhance(prisma, undefined, undefined) as unknown;
       sqlCaptureV2.length = 0;
-      resultV2 = await bundle.run(db2);
+      resultV2 = await bundle.run(db2, queryArgs);
       sqlV2.push(...sqlCaptureV2);
     } catch (e) {
       errorV2 = e instanceof Error ? e.message : String(e);
@@ -190,7 +206,7 @@ export async function runCompare(options: CompareOptions): Promise<CompareRow[]>
       const db3 = enhanceV3.enhance(prisma, undefined, {
         sqlCapture: sqlCaptureV3,
       }) as unknown;
-      resultV3 = await bundle.run(db3);
+      resultV3 = await bundle.run(db3, queryArgs);
       sqlV3.push(...sqlCaptureV3);
     } catch (e) {
       errorV3 = e instanceof Error ? e.message : String(e);

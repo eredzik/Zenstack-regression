@@ -53,4 +53,9 @@ export interface CompareOptions {
   ignoreSqlDiff?: boolean;
   /** Skip printing to stdout (for programmatic use). */
   silent?: boolean;
+  /**
+   * Per query id: deep-merge into the extracted Prisma call's first argument.
+   * From JSON file: use `loadQueryFixtures` or `--fixtures` on the CLI.
+   */
+  queryFixtures?: Record<string, Record<string, unknown>>;
 }

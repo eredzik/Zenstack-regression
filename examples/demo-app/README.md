@@ -63,6 +63,18 @@ If **`docker` is not installed**, use any PostgreSQL 16 instance and set `DATABA
 | `compare` | Full diff: SQL + results (`ok` requires both) |
 | `compare:results` | Same as compare but `--ignore-sql-diff` |
 | `compare:report` | Strict compare + human summary with file:line per query id |
+| `fixtures:template` | Write **`query-fixtures.template.json`** (one key per extracted query id) |
+| `seed:faker:gen` | **`seed-faker`** CLI → **`.zenstack-compare/seed-faker.generated.ts`** |
+| `seed:faker` | Run **`tsx`** on that file (needs **`@faker-js/faker`**) |
+
+### Faker seed + query fixtures
+
+1. **`npm run extract`** → **`npm run seed:faker:gen`** (from repo root, **`npm run build`** first).
+2. **`npm run db:push`** → **`npm run seed:faker`** — creates **`N`** rows per model with FK wiring (nullable FKs sometimes `null`).
+3. **`npm run fixtures:template`** → copy to **`.zenstack-compare/query-fixtures.json`** and fill **`queries.<id>`** with deep-merge patches (e.g. **`{ "where": { "id": "<real-user-id>" } }`**). Example at repo root: **`query-fixtures.json.example`**.
+4. **`compare`** / **`compare:report`** loads **`.zenstack-compare/query-fixtures.json`** if it exists; override with **`ZS_FIXTURES=relative-or-abs-path`**.
+
+Generated **`queries.ts`** calls **`__mergeQueryArgs(extractedArgs, queryArgs)`** so runtime patches overlay the verbatim source.
 
 Extra regression-style queries (nested orderBy, **AND**/**OR**/**NOT**, relation filters, aggregates) are in **`src/regression-surface.ts`**. See **`COMPARE_REPORT.md`** for how to regenerate a summary.
 
