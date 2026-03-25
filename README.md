@@ -65,6 +65,8 @@ zenstack-query-compare compare \
 
 Omit **`--ignore-sql-diff`** when both sides emit comparable SQL (e.g. two Prisma-based clients).
 
+Reports include **`recordCountV2`** / **`recordCountV3`**: for array results this is the **array length**; for a single object (e.g. `findFirst`, `aggregate`) it is **1**; for `null` it is **0**. On error, that side’s count is **`null`**. Text output prints a `records v2: …  v3: …` line per query.
+
 Each of `--enhance-v2` / `--enhance-v3` should resolve to a module that exports **`enhance`** with the same shape you use in production (typically `enhance(prisma, userContext, options)`). If v2 and v3 live under the same package name, use **two small wrapper files** that re-export the correct build:
 
 ```javascript

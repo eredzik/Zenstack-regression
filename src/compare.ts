@@ -11,6 +11,10 @@ export type CompareRow = {
   sqlMatch: boolean;
   resultV2Json: string | null;
   resultV3Json: string | null;
+  /** Rows returned: array length, or 1 for a single object, 0 for null. Null if that side errored. */
+  recordCountV2: number | null;
+  recordCountV3: number | null;
+  recordCountsMatch: boolean;
   resultsMatch: boolean;
   errorV2: string | null;
   errorV3: string | null;
@@ -54,6 +58,18 @@ function prismaQueryFromEvent(e: unknown): string {
     return String((e as { query: unknown }).query);
   }
   return String(e);
+}
+
+/**
+ * Interpret Prisma-style results as a "record count" for reporting.
+ * - findMany / groupBy: array length
+ * - findFirst / findUnique / single entity or aggregate object: 1
+ * - null: 0
+ */
+export function countResultRecords(value: unknown): number {
+  if (value === null || typeof value === "undefined") return 0;
+  if (Array.isArray(value)) return value.length;
+  return 1;
 }
 
 /** Resolve imports from the target project (--cwd) so @prisma/client loads from example app node_modules. */
@@ -182,6 +198,14 @@ export async function runCompare(options: CompareOptions): Promise<CompareRow[]>
 
     const resultV2Json = errorV2 === null ? stableStringify(resultV2) : null;
     const resultV3Json = errorV3 === null ? stableStringify(resultV3) : null;
+    const recordCountV2 =
+      errorV2 === null ? countResultRecords(resultV2) : null;
+    const recordCountV3 =
+      errorV3 === null ? countResultRecords(resultV3) : null;
+    const recordCountsMatch =
+      recordCountV2 !== null &&
+      recordCountV3 !== null &&
+      recordCountV2 === recordCountV3;
     const resultsMatch =
       errorV2 === null && errorV3 === null && resultV2Json === resultV3Json;
     const sqlMatch = normalizeSql(sqlV2) === normalizeSql(sqlV3);
@@ -198,6 +222,9 @@ export async function runCompare(options: CompareOptions): Promise<CompareRow[]>
       sqlMatch,
       resultV2Json,
       resultV3Json,
+      recordCountV2,
+      recordCountV3,
+      recordCountsMatch,
       resultsMatch,
       errorV2,
       errorV3,
@@ -210,6 +237,11 @@ export async function runCompare(options: CompareOptions): Promise<CompareRow[]>
     for (const r of rows) {
       const status = r.ok ? "OK" : "DIFF";
       console.log(`[${status}] ${r.id}`);
+      const c2 =
+        r.recordCountV2 === null ? "n/a" : String(r.recordCountV2);
+      const c3 =
+        r.recordCountV3 === null ? "n/a" : String(r.recordCountV3);
+      console.log(`  records v2: ${c2}  v3: ${c3}`);
       if (!r.sqlMatch) {
         console.log("  SQL v2:", r.sqlV2.join(" | "));
         console.log("  SQL v3:", r.sqlV3.join(" | "));
