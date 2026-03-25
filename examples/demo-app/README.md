@@ -5,7 +5,7 @@ This example runs the query harness **twice**:
 1. **v2** — `@zenstackhq/runtime-v2` `createEnhancement` wrapping **Prisma** (open policy guards + `modelMeta` derived from Prisma DMMF).
 2. **v3** — `@zenstackhq/orm` **`ZenStackClient`** over **better-sqlite3** / Kysely, using the schema compiled from `zenstack/schema.zmodel`.
 
-Both sides use the **same SQLite file** (`prisma/dev.db`).
+Both sides use the same **`DATABASE_URL`**. The default workflow uses **PostgreSQL in Docker** (`docker compose`); set `DATABASE_URL` (see `.env.example`). If `DATABASE_URL` is a `file:` URL or unset, v3 falls back to **SQLite** in `enhance-v3.mjs` while Prisma still follows `schema.prisma` — use Postgres for the full demo.
 
 ## Regression dataset (nested includes + orderBy)
 
@@ -26,15 +26,25 @@ npm install
 npm run build
 ```
 
-## One-shot demo
+## One-shot demo (PostgreSQL + Docker)
 
 ```bash
 cd examples/demo-app
+cp .env.example .env   # or export DATABASE_URL from .env.example
 npm install
-npm run demo
+npm run demo:postgres  # compose up, wait, extract, db push, seed, compare
 ```
 
-If `prisma db push` fails because the old `dev.db` layout differs, delete `prisma/dev.db` and run `npm run db:push` again (local SQLite only).
+Or manually:
+
+```bash
+docker compose up -d
+export DATABASE_URL="postgresql://demo:demo@127.0.0.1:5433/zenstack_compare_demo"
+npm run postgres:wait
+npm run extract && npm run db:push && npm run db:seed && npm run compare
+```
+
+Port **5433** avoids clashing with a local Postgres on 5432.
 
 ## Scripts
 

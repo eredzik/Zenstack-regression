@@ -14,7 +14,10 @@
     "db:seed": "tsx seed.ts",
     "compare": "npm run zenstack:generate && npm run zenstack:v2-meta && prisma generate && npm run build-zenstack-schema && npm run build-queries && node ../../dist/cli.js compare --cwd . --queries-module ./.zenstack-compare/out/queries.js --enhance-v2 ./enhance-v2.mjs --enhance-v3 ./enhance-v3.mjs --json",
     "compare:results": "npm run zenstack:generate && npm run zenstack:v2-meta && prisma generate && npm run build-zenstack-schema && npm run build-queries && node ../../dist/cli.js compare --cwd . --queries-module ./.zenstack-compare/out/queries.js --enhance-v2 ./enhance-v2.mjs --enhance-v3 ./enhance-v3.mjs --ignore-sql-diff --json",
-    "demo": "npm run extract && npm run db:push && npm run db:seed && npm run compare"
+    "demo": "npm run extract && npm run db:push && npm run db:seed && npm run compare",
+    "postgres:up": "docker compose up -d postgres",
+    "postgres:wait": "node scripts/wait-for-postgres.mjs",
+    "demo:postgres": "docker compose up -d postgres && export DATABASE_URL=postgresql://demo:demo@127.0.0.1:5433/zenstack_compare_demo && npm run postgres:wait && npm run extract && npm run db:push && npm run db:seed && npm run compare"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0"
@@ -26,6 +29,7 @@
     "@zenstackhq/schema": "^3.5.1",
     "better-sqlite3": "^12.8.0",
     "kysely": "^0.28.14",
+    "pg": "^8.20.0",
     "prisma": "^6.5.0",
     "tsx": "^4.19.3",
     "typescript": "^5.7.3",
