@@ -1,0 +1,21 @@
+// Sample schema for extraction tests (not a full ZenStack model)
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id    String @id
+  email String
+  posts Post[]
+}
+
+model Post {
+  id     String @id
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+}
