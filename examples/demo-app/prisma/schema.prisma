@@ -1,0 +1,35 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Regression shape from ZenStack client-api relation / order-by nested includes tests.
+model User {
+  id       String    @id
+  email    String    @unique
+  posts    Post[]
+  comments Comment[]
+}
+
+model Post {
+  id         String    @id
+  sequence   Int
+  title      String
+  published  Boolean   @default(false)
+  author     User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId   String
+  comments   Comment[]
+}
+
+model Comment {
+  id       String  @id
+  content  String
+  post     Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId   String
+  author   User?   @relation(fields: [authorId], references: [id])
+  authorId String?
+}

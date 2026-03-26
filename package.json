@@ -1,0 +1,41 @@
+{
+  "name": "zenstack-query-compare",
+  "version": "0.1.0",
+  "description": "Extract ZenStack-style db.model.method queries from a codebase and compare SQL/results across two ZenStack client versions",
+  "type": "module",
+  "bin": {
+    "zenstack-query-compare": "./dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/cli.js",
+    "./compare": "./dist/compare.js",
+    "./merge": "./dist/merge.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "fast-glob": "^3.3.3",
+    "typescript": "^5.7.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10"
+  },
+  "peerDependencies": {
+    "@prisma/client": ">=5"
+  },
+  "peerDependenciesMeta": {
+    "@prisma/client": {
+      "optional": true
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "license": "MIT"
+}
