@@ -101,3 +101,113 @@ export async function benchTier5VeryHeavyUserTree(db: PrismaClient) {
     },
   });
 }
+
+/**
+ * Tier 6: wider than tier4 — more parent rows × more child comments (often regresses v3 vs Prisma).
+ */
+export async function benchTier6WidePosts80Comments20(db: PrismaClient) {
+  return db.post.findMany({
+    where: { authorId: "u1" },
+    take: 80,
+    orderBy: [{ sequence: "desc" }],
+    include: {
+      author: { select: { id: true, email: true } },
+      comments: {
+        orderBy: [{ id: "asc" }],
+        take: 20,
+        include: {
+          author: true,
+          post: { select: { id: true, title: true, sequence: true } },
+        },
+      },
+    },
+  });
+}
+
+/** Tier 7: all u1 posts (120) with deep comment includes — maximum width on seeded u1 graph. */
+export async function benchTier7AllU1PostsDeepComments(db: PrismaClient) {
+  return db.post.findMany({
+    where: { authorId: "u1" },
+    orderBy: [{ sequence: "desc" }],
+    include: {
+      author: { select: { id: true, email: true } },
+      comments: {
+        orderBy: [{ id: "asc" }],
+        include: {
+          author: true,
+          post: { select: { id: true, title: true, sequence: true } },
+        },
+      },
+    },
+  });
+}
+
+/**
+ * Tier 8: large flat comment scan with nested post → author (cross-user; stresses relation assembly).
+ * Often shows v3 slower than Prisma on WASM PGlite and sometimes on server Postgres.
+ */
+export async function benchTier8WideGlobalCommentsNested(db: PrismaClient) {
+  return db.comment.findMany({
+    take: 200,
+    orderBy: [{ id: "asc" }],
+    include: {
+      author: { select: { id: true, email: true } },
+      post: {
+        include: {
+          author: { select: { id: true, email: true } },
+        },
+      },
+    },
+  });
+}
+
+/** Tier 9: u2’s 40 posts × all comments each (second-largest author in seed). */
+export async function benchTier9U2PostsAllCommentsNested(db: PrismaClient) {
+  return db.post.findMany({
+    where: { authorId: "u2" },
+    orderBy: [{ sequence: "asc" }],
+    include: {
+      author: true,
+      comments: {
+        orderBy: [{ id: "asc" }],
+        include: {
+          author: true,
+          post: { select: { id: true, title: true } },
+        },
+      },
+    },
+  });
+}
+
+/**
+ * Tier 10: two parallel wide branches on one user (posts tree + global comments list).
+ * Extra JS-side graph merge vs a single findMany.
+ */
+export async function benchTier10UserParallelWideBranches(db: PrismaClient) {
+  return db.user.findUnique({
+    where: { id: "u1" },
+    include: {
+      posts: {
+        orderBy: [{ sequence: "desc" }],
+        take: 60,
+        include: {
+          comments: {
+            orderBy: [{ id: "asc" }],
+            take: 15,
+            include: { author: true },
+          },
+        },
+      },
+      comments: {
+        orderBy: [{ id: "asc" }],
+        take: 100,
+        include: {
+          author: true,
+          post: {
+            include: { author: { select: { id: true, email: true } } },
+          },
+        },
+      },
+    },
+  });
+}

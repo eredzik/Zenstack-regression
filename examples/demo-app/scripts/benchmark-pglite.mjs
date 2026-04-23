@@ -69,13 +69,34 @@ async function main() {
   printBenchmarkSummary(rounds, json);
 
   if (!json) {
-    const idToFn = new Map([
-      ["aa92191b2a1b67b3", "benchTier1ScalarUser"],
-      ["5b62e016f3a4746f", "benchTier2CommentWithPostAndAuthor"],
-      ["3edd72b7c580b8c2", "benchTier3DeepNestedUser"],
-      ["e81f0c0fa6763dd3", "benchTier4WidePostsNested"],
-      ["d5e186c129062037", "benchTier5VeryHeavyUserTree"],
-    ]);
+    const benchPath = path.join(appRoot, "src", "benchmark-queries.ts");
+    const benchLines = readFileSync(benchPath, "utf8").split("\n");
+    const fnAtLine = [];
+    for (let i = 0; i < benchLines.length; i++) {
+      const m = benchLines[i].match(
+        /^\s*export\s+async\s+function\s+(\w+)\s*\(/
+      );
+      if (m) fnAtLine.push({ name: m[1], line: i + 1 });
+    }
+    function fnForExtractLine(line) {
+      let name = null;
+      for (const e of fnAtLine) {
+        if (e.line <= line) name = e.name;
+        else break;
+      }
+      return name;
+    }
+
+    const manifest = JSON.parse(
+      readFileSync(path.join(cwd, ".zenstack-compare", "extract-manifest.json"), "utf8")
+    );
+    const idToFn = new Map();
+    for (const q of manifest.queries ?? []) {
+      if (typeof q.file === "string" && q.file.includes("benchmark-queries")) {
+        idToFn.set(q.id, fnForExtractLine(q.line));
+      }
+    }
+
     console.log("");
     console.log("# queryId → benchmark function (src/benchmark-queries.ts)");
     const seen = new Set();
