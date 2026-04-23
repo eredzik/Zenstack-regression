@@ -116,4 +116,10 @@ export interface BenchmarkOptions {
   queryFixtures?: Record<string, Record<string, unknown>>;
   warmups: number;
   iterations: number;
+  /**
+   * How many identical `run()` calls execute in parallel per side per iteration (`Promise.all`).
+   * Wall time is batch completion (time until all copies finish). SQL/db metrics are summed
+   * across all copies. Omit or 1 = sequential (same as before).
+   */
+  concurrency?: number;
 }

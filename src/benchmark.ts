@@ -36,11 +36,24 @@ export function summarizeMs(values: number[]): {
 /** Human-readable TSV summary (or JSON when `json` is true). */
 export function printBenchmarkSummary(
   rounds: BenchmarkRoundRow[],
-  json: boolean
+  json: boolean,
+  opts?: { concurrency?: number }
 ): void {
   if (json) {
-    console.log(JSON.stringify(rounds, null, 2));
+    const c = opts?.concurrency ?? 1;
+    if (c > 1) {
+      console.log(JSON.stringify({ concurrency: c, rounds }, null, 2));
+    } else {
+      console.log(JSON.stringify(rounds, null, 2));
+    }
     return;
+  }
+
+  const c = opts?.concurrency ?? 1;
+  if (c > 1) {
+    console.log(
+      `# concurrency=${c}: each iteration runs ${c} parallel copies per side; wall_* = batch completion time; sql/db totals summed across copies.`
+    );
   }
 
   const byId = new Map<string, BenchmarkRoundRow[]>();
@@ -99,6 +112,11 @@ export function printBenchmarkSummary(
   console.log(
     "# js_* = wall_* - db_* (client/ORM work + any gap vs reported DB time), clamped at 0."
   );
+  if (c > 1) {
+    console.log(
+      "# With concurrency>1, db_* sums durations across parallel workers — can exceed wall_* because DB work overlaps in time."
+    );
+  }
 }
 
 function prismaQueryFromEvent(e: unknown): string {
@@ -222,14 +240,25 @@ export async function runBenchmark(
 
   await prisma.$connect();
 
+  const concurrency = Math.max(1, options.concurrency ?? 1);
+
   /** One v2 wrapper for the whole run (steady-state; avoids re-creating enhancement each query). */
   const dbV2 = enhanceV2.enhance(prisma, undefined, undefined) as unknown;
-  const sqlCaptureV3Shared: string[] = [];
-  const durationMsCaptureV3: number[] = [];
-  const dbV3 = enhanceV3.enhance(prisma, undefined, {
-    sqlCapture: sqlCaptureV3Shared,
-    durationMsCapture: durationMsCaptureV3,
-  }) as unknown;
+
+  /** v3: one client per concurrent worker so Kysely log arrays stay isolated. */
+  const dbV3Workers: Array<{
+    db: unknown;
+    sqlCapture: string[];
+    durationMsCapture: number[];
+  }> = Array.from({ length: concurrency }, () => {
+    const sqlCapture: string[] = [];
+    const durationMsCapture: number[] = [];
+    const db = enhanceV3.enhance(prisma, undefined, {
+      sqlCapture,
+      durationMsCapture,
+    }) as unknown;
+    return { db, sqlCapture, durationMsCapture };
+  });
 
   const fixtures = options.queryFixtures ?? {};
   const list: Array<{
@@ -268,15 +297,27 @@ export async function runBenchmark(
     for (let w = 0; w < options.warmups; w++) {
       sqlCaptureV2.length = 0;
       prismaDbDurationAccV2 = 0;
+      for (const wr of dbV3Workers) {
+        wr.sqlCapture.length = 0;
+        wr.durationMsCapture.length = 0;
+      }
       try {
-        await bundle.run(dbV2, queryArgs);
+        await Promise.all(
+          Array.from({ length: concurrency }, () =>
+            bundle.run(dbV2, queryArgs)
+          )
+        );
       } catch {
         /* warm-up errors ignored */
       }
-      sqlCaptureV3Shared.length = 0;
-      durationMsCaptureV3.length = 0;
+      for (const wr of dbV3Workers) {
+        wr.sqlCapture.length = 0;
+        wr.durationMsCapture.length = 0;
+      }
       try {
-        await bundle.run(dbV3, queryArgs);
+        await Promise.all(
+          dbV3Workers.map((wr) => bundle.run(wr.db, queryArgs))
+        );
       } catch {
         /* warm-up errors ignored */
       }
@@ -298,7 +339,11 @@ export async function runBenchmark(
       prismaDbDurationAccV2 = 0;
       const t2a = nowMs();
       try {
-        await bundle.run(dbV2, queryArgs);
+        await Promise.all(
+          Array.from({ length: concurrency }, () =>
+            bundle.run(dbV2, queryArgs)
+          )
+        );
         const wallEnd = nowMs();
         v2Ms = wallEnd - t2a;
         v2SqlCount = sqlCaptureV2.length;
@@ -311,16 +356,24 @@ export async function runBenchmark(
         v2JsMs = null;
       }
 
-      sqlCaptureV3Shared.length = 0;
-      durationMsCaptureV3.length = 0;
+      for (const wr of dbV3Workers) {
+        wr.sqlCapture.length = 0;
+        wr.durationMsCapture.length = 0;
+      }
       const t3a = nowMs();
       try {
-        await bundle.run(dbV3, queryArgs);
+        await Promise.all(
+          dbV3Workers.map((wr) => bundle.run(wr.db, queryArgs))
+        );
         const wallEnd = nowMs();
         v3Ms = wallEnd - t3a;
-        v3SqlCount = sqlCaptureV3Shared.length;
-        v3DbMs = durationMsCaptureV3.reduce((a, b) => a + b, 0);
-        v3JsMs = Math.max(0, v3Ms - v3DbMs);
+        v3SqlCount = dbV3Workers.reduce((s, wr) => s + wr.sqlCapture.length, 0);
+        v3DbMs = dbV3Workers.reduce(
+          (s, wr) =>
+            s + wr.durationMsCapture.reduce((a, b) => a + b, 0),
+          0
+        );
+        v3JsMs = Math.max(0, v3Ms - (v3DbMs ?? 0));
       } catch (e) {
         errorV3 = e instanceof Error ? e.message : String(e);
         v3Ms = nowMs() - t3a;

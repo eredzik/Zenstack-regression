@@ -201,6 +201,11 @@ program
   .option("--warmup <n>", "Warmup rounds per query per side", "2")
   .option("--iterations <n>", "Timed iterations per query", "30")
   .option(
+    "--concurrency <n>",
+    "Parallel identical runs per side per iteration (Promise.all); wall = batch time; sql/db summed",
+    "1"
+  )
+  .option(
     "--prisma-factory-module <spec>",
     "ESM module URL exporting createBenchmarkPrisma(): Promise<PrismaClient-like> (skips default PrismaClient ctor)"
   )
@@ -216,6 +221,7 @@ program
     fixtures?: string;
     warmup: string;
     iterations: string;
+    concurrency: string;
     prismaFactoryModule?: string;
     json: boolean;
   }) => {
@@ -246,6 +252,8 @@ program
       prismaFactory = mod.createBenchmarkPrisma;
     }
 
+    const conc = Math.max(1, parseInt(opts.concurrency, 10) || 1);
+
     const rounds = await runBenchmark({
       cwd,
       queriesModule,
@@ -261,9 +269,10 @@ program
       queryFixtures,
       warmups: parseInt(opts.warmup, 10) || 0,
       iterations: parseInt(opts.iterations, 10) || 1,
+      concurrency: conc,
     });
 
-    printBenchmarkSummary(rounds, opts.json);
+    printBenchmarkSummary(rounds, opts.json, { concurrency: conc });
   });
 
 program

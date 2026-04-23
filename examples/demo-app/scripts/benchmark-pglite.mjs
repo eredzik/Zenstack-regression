@@ -22,6 +22,10 @@ const { runBenchmark, printBenchmarkSummary } = await import(
 
 const WARMUP = parseInt(process.env.ZS_BENCH_WARMUP ?? "3", 10) || 0;
 const ITERATIONS = parseInt(process.env.ZS_BENCH_ITERATIONS ?? "15", 10) || 1;
+const CONCURRENCY = Math.max(
+  1,
+  parseInt(process.env.ZS_BENCH_CONCURRENCY ?? "1", 10) || 1
+);
 
 async function createBenchmarkPrisma() {
   const pglite = new PGlite("memory://");
@@ -66,10 +70,11 @@ async function main() {
     queryFixtures: {},
     warmups: WARMUP,
     iterations: ITERATIONS,
+    concurrency: CONCURRENCY,
   });
 
   const json = process.argv.includes("--json");
-  printBenchmarkSummary(rounds, json);
+  printBenchmarkSummary(rounds, json, { concurrency: CONCURRENCY });
 
   if (!json) {
     function exportFnByLine(tsPath) {

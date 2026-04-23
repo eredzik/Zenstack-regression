@@ -22,9 +22,11 @@
     "postgres:up": "docker compose up -d postgres",
     "postgres:wait": "node scripts/wait-for-postgres.mjs",
     "demo:postgres": "docker compose up -d postgres && export DATABASE_URL=postgresql://demo:demo@127.0.0.1:5433/zenstack_compare_demo && npm run postgres:wait && npm run extract && npm run db:push && npm run db:seed && npm run compare",
-    "benchmark": "npm run zenstack:generate && npm run zenstack:v2-meta && prisma generate && npm run build-zenstack-schema && npm run extract && npm run build-queries && node ../../dist/cli.js benchmark --cwd . --queries-module ./.zenstack-compare/out/queries.js --enhance-v2 ./enhance-v2.mjs --enhance-v3 ./enhance-v3.mjs --query-id-prefix benchmark-queries --query-id-prefix benchmark-scale-queries --warmup 3 --iterations 25",
+    "benchmark": "npm run zenstack:generate && npm run zenstack:v2-meta && prisma generate && npm run build-zenstack-schema && npm run extract && npm run build-queries && node ../../dist/cli.js benchmark --cwd . --queries-module ./.zenstack-compare/out/queries.js --enhance-v2 ./enhance-v2.mjs --enhance-v3 ./enhance-v3.mjs --query-id-prefix benchmark-queries --query-id-prefix benchmark-scale-queries --warmup 3 --iterations 25 --concurrency 1",
+    "benchmark:concurrent": "npm run zenstack:generate && npm run zenstack:v2-meta && prisma generate && npm run build-zenstack-schema && npm run extract && npm run build-queries && node ../../dist/cli.js benchmark --cwd . --queries-module ./.zenstack-compare/out/queries.js --enhance-v2 ./enhance-v2.mjs --enhance-v3 ./enhance-v3.mjs --query-id-prefix benchmark-queries --query-id-prefix benchmark-scale-queries --warmup 2 --iterations 15 --concurrency 8",
     "benchmark:postgres": "docker compose up -d postgres && export DATABASE_URL=postgresql://demo:demo@127.0.0.1:5433/zenstack_compare_demo && npm run postgres:wait && npm run db:push && npm run db:seed && npm run benchmark",
-    "benchmark:pglite": "npm run zenstack:generate && npm run zenstack:v2-meta && prisma generate && npm run build-zenstack-schema && npm run extract && npm run build-queries && node scripts/benchmark-pglite.mjs"
+    "benchmark:pglite": "npm run zenstack:generate && npm run zenstack:v2-meta && prisma generate && npm run build-zenstack-schema && npm run extract && npm run build-queries && node scripts/benchmark-pglite.mjs",
+    "benchmark:pglite:conc8": "ZS_BENCH_CONCURRENCY=8 npm run benchmark:pglite"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0"
