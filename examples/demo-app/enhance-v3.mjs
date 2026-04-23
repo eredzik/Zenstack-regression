@@ -10,6 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SqliteDialect } from "@zenstackhq/orm/dialects/sqlite";
 import { PostgresDialect } from "@zenstackhq/orm/dialects/postgres";
+import { PGliteDialect } from "kysely-pglite-dialect";
 import { ZenStackClient } from "@zenstackhq/orm";
 import { schema } from "./zenstack/out/schema.js";
 
@@ -57,6 +58,12 @@ function getPgPool(connectionString) {
   return p;
 }
 
+function getBenchPglite() {
+  if (process.env.ZS_PGLITE_MODE !== "1") return null;
+  const g = globalThis;
+  return g.__zenstackBenchPglite ?? null;
+}
+
 export function enhance(_prisma, _ctx, options = {}) {
   const sqlCapture = options.sqlCapture;
   const log =
@@ -67,6 +74,14 @@ export function enhance(_prisma, _ctx, options = {}) {
         }
       }
     : undefined;
+
+  const benchPglite = getBenchPglite();
+  if (benchPglite) {
+    return new ZenStackClient(schema, {
+      dialect: new PGliteDialect(benchPglite),
+      log: log ?? undefined,
+    });
+  }
 
   const dbUrl = process.env.DATABASE_URL;
 

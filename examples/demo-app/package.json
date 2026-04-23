@@ -8,7 +8,7 @@
     "zenstack:generate": "zen generate --schema zenstack/schema.zmodel -o zenstack --silent",
     "zenstack:v2-meta": "node scripts/build-model-meta.mjs",
     "build-zenstack-schema": "tsc -p tsconfig.zenstack.json",
-    "extract": "node ../../dist/cli.js extract --root . --exclude \"**/seed.ts\"",
+    "extract": "node ../../dist/cli.js extract --root . --exclude \"**/seed.ts\" --exclude \"**/seed-data.ts\"",
     "build-queries": "tsc -p tsconfig.queries.json",
     "db:push": "prisma db push",
     "db:seed": "tsx seed.ts",
@@ -23,12 +23,14 @@
     "postgres:wait": "node scripts/wait-for-postgres.mjs",
     "demo:postgres": "docker compose up -d postgres && export DATABASE_URL=postgresql://demo:demo@127.0.0.1:5433/zenstack_compare_demo && npm run postgres:wait && npm run extract && npm run db:push && npm run db:seed && npm run compare",
     "benchmark": "npm run zenstack:generate && npm run zenstack:v2-meta && prisma generate && npm run build-zenstack-schema && npm run extract && npm run build-queries && node ../../dist/cli.js benchmark --cwd . --queries-module ./.zenstack-compare/out/queries.js --enhance-v2 ./enhance-v2.mjs --enhance-v3 ./enhance-v3.mjs --query-id-prefix benchmark-queries --warmup 3 --iterations 25",
-    "benchmark:postgres": "docker compose up -d postgres && export DATABASE_URL=postgresql://demo:demo@127.0.0.1:5433/zenstack_compare_demo && npm run postgres:wait && npm run db:push && npm run db:seed && npm run benchmark"
+    "benchmark:postgres": "docker compose up -d postgres && export DATABASE_URL=postgresql://demo:demo@127.0.0.1:5433/zenstack_compare_demo && npm run postgres:wait && npm run db:push && npm run db:seed && npm run benchmark",
+    "benchmark:pglite": "npm run zenstack:generate && npm run zenstack:v2-meta && prisma generate && npm run build-zenstack-schema && npm run extract && npm run build-queries && node scripts/benchmark-pglite.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.4.4",
     "@faker-js/faker": "^9.9.0",
     "@zenstackhq/cli": "^3.5.1",
     "@zenstackhq/orm": "^3.5.1",
@@ -36,6 +38,8 @@
     "@zenstackhq/schema": "^3.5.1",
     "better-sqlite3": "^12.8.0",
     "kysely": "^0.28.14",
+    "kysely-pglite-dialect": "^1.3.1",
+    "pglite-prisma-adapter": "^0.6.1",
     "pg": "^8.20.0",
     "prisma": "^6.5.0",
     "tsx": "^4.19.3",

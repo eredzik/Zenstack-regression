@@ -3,6 +3,78 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import type { BenchmarkOptions, BenchmarkRoundRow } from "./types.js";
 
+export function summarizeMs(values: number[]): {
+  n: number;
+  mean: number;
+  median: number;
+  p95: number;
+  min: number;
+  max: number;
+} {
+  const sorted = [...values].sort((a, b) => a - b);
+  const n = sorted.length;
+  if (n === 0) {
+    return { n: 0, mean: 0, median: 0, p95: 0, min: 0, max: 0 };
+  }
+  const sum = sorted.reduce((a, b) => a + b, 0);
+  const mean = sum / n;
+  const mid = Math.floor(n / 2);
+  const median =
+    n % 2 === 0 ? (sorted[mid - 1]! + sorted[mid]!) / 2 : sorted[mid]!;
+  const p95Idx = Math.min(n - 1, Math.ceil(n * 0.95) - 1);
+  const p95 = sorted[p95Idx]!;
+  return {
+    n,
+    mean,
+    median,
+    p95,
+    min: sorted[0]!,
+    max: sorted[n - 1]!,
+  };
+}
+
+/** Human-readable TSV summary (or JSON when `json` is true). */
+export function printBenchmarkSummary(
+  rounds: BenchmarkRoundRow[],
+  json: boolean
+): void {
+  if (json) {
+    console.log(JSON.stringify(rounds, null, 2));
+    return;
+  }
+
+  const byId = new Map<string, BenchmarkRoundRow[]>();
+  for (const r of rounds) {
+    const arr = byId.get(r.id) ?? [];
+    arr.push(r);
+    byId.set(r.id, arr);
+  }
+
+  console.log(
+    "queryId\tv2_median_ms\tv3_median_ms\tratio_v3/v2\tv2_sql_n\tv3_sql_n\terrors"
+  );
+  for (const [id, rs] of [...byId.entries()].sort((a, b) =>
+    a[0].localeCompare(b[0])
+  )) {
+    const v2ok = rs.filter((x) => !x.errorV2).map((x) => x.v2Ms);
+    const v3ok = rs.filter((x) => !x.errorV3).map((x) => x.v3Ms);
+    const s2 = summarizeMs(v2ok);
+    const s3 = summarizeMs(v3ok);
+    const ratio =
+      s2.median > 0 && s3.median > 0
+        ? (s3.median / s2.median).toFixed(3)
+        : "n/a";
+    const err = rs.some((x) => x.errorV2 || x.errorV3) ? "yes" : "no";
+    const sql2Row = rs.find((x) => !x.errorV2);
+    const sql3Row = rs.find((x) => !x.errorV3);
+    const sql2 = sql2Row?.v2SqlCount ?? 0;
+    const sql3 = sql3Row?.v3SqlCount ?? 0;
+    console.log(
+      `${id}\t${s2.median.toFixed(3)}\t${s3.median.toFixed(3)}\t${ratio}\t${sql2}\t${sql3}\t${err}`
+    );
+  }
+}
+
 function prismaQueryFromEvent(e: unknown): string {
   if (e && typeof e === "object" && "query" in e) {
     return String((e as { query: unknown }).query);
@@ -45,15 +117,6 @@ export async function runBenchmark(
   options: BenchmarkOptions
 ): Promise<BenchmarkRoundRow[]> {
   const cwd = path.resolve(options.cwd);
-  const prismaMod = (await importFromProject(
-    options.prismaClientSpecifier,
-    cwd
-  )) as { PrismaClient: new (args?: object) => unknown };
-  const PrismaClient = prismaMod.PrismaClient as new (args?: object) => {
-    $connect: () => Promise<void>;
-    $disconnect: () => Promise<void>;
-    $on: (event: string, cb: (e: unknown) => void) => void;
-  };
 
   const enhanceV2 = (await importFromProject(
     options.enhanceV2Module,
@@ -96,9 +159,26 @@ export async function runBenchmark(
     }>;
   };
 
-  const prisma = new PrismaClient({
-    log: [{ level: "query", emit: "event" }],
-  });
+  type PrismaBench = {
+    $connect: () => Promise<void>;
+    $disconnect: () => Promise<void>;
+    $on: (event: string, cb: (e: unknown) => void) => void;
+  };
+
+  let prisma: PrismaBench;
+  if (options.prismaFactory) {
+    prisma = await options.prismaFactory();
+  } else {
+    const prismaMod = (await importFromProject(
+      options.prismaClientSpecifier,
+      cwd
+    )) as { PrismaClient: new (args?: object) => unknown };
+    const PrismaClient = prismaMod.PrismaClient as new (args?: object) => PrismaBench;
+    prisma = new PrismaClient({
+      log: [{ level: "query", emit: "event" }],
+    });
+  }
+
   const sqlCaptureV2: string[] = [];
   prisma.$on("query", (e: unknown) => {
     sqlCaptureV2.push(prismaQueryFromEvent(e));

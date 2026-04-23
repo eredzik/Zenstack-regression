@@ -76,7 +76,20 @@ export interface BenchmarkOptions {
   queriesModule: string;
   enhanceV2Module: string;
   enhanceV3Module: string;
+  /**
+   * When `prismaFactory` is set, used only if the factory is not provided.
+   * Ignored when `prismaFactory` builds the client (e.g. PGlite + adapter).
+   */
   prismaClientSpecifier: string;
+  /**
+   * Optional async factory (e.g. Prisma + PGlite driver adapter). When set,
+   * `new PrismaClient()` from `prismaClientSpecifier` is not used.
+   */
+  prismaFactory?: () => Promise<{
+    $connect: () => Promise<void>;
+    $disconnect: () => Promise<void>;
+    $on: (event: string, cb: (e: unknown) => void) => void;
+  }>;
   /** If empty, all queries in the module are benchmarked. */
   queryIds: string[];
   /** If set, only queries whose extracted `file` path includes this substring. */
