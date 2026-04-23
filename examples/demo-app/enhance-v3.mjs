@@ -66,11 +66,20 @@ function getBenchPglite() {
 
 export function enhance(_prisma, _ctx, options = {}) {
   const sqlCapture = options.sqlCapture;
-  const log =
-    Array.isArray(sqlCapture) ?
-      (event) => {
-        if (event.level === "query" && event.query?.sql) {
+  const durationMsCapture = options.durationMsCapture;
+  const needsLog =
+    Array.isArray(sqlCapture) || Array.isArray(durationMsCapture);
+  const log = needsLog
+    ? (event) => {
+        if (event.level !== "query") return;
+        if (Array.isArray(sqlCapture) && event.query?.sql) {
           sqlCapture.push(String(event.query.sql).trim());
+        }
+        if (
+          Array.isArray(durationMsCapture) &&
+          typeof event.queryDurationMillis === "number"
+        ) {
+          durationMsCapture.push(event.queryDurationMillis);
         }
       }
     : undefined;

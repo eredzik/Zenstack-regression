@@ -63,8 +63,22 @@ export interface CompareOptions {
 /** One timed round for a single query id on both ZenStack sides (v2 then v3). */
 export interface BenchmarkRoundRow {
   id: string;
+  /** Wall-clock time for the full `run()` (ORM + DB + result shaping). */
   v2Ms: number;
   v3Ms: number;
+  /**
+   * Sum of Prisma engine-reported `duration` (ms) per SQL round-trip in this iteration.
+   * Approximates time inside the DB driver / engine for that work unit.
+   */
+  v2DbMs: number | null;
+  /** Sum of Kysely `queryDurationMillis` per logged query (ZenStack v3 / Kysely path). */
+  v3DbMs: number | null;
+  /**
+   * Wall minus summed DB-reported time, clamped at 0. Captures client-side work
+   * (serialization, relation assembly, JS overhead). Not perfectly disjoint from DB.
+   */
+  v2JsMs: number | null;
+  v3JsMs: number | null;
   v2SqlCount: number;
   v3SqlCount: number;
   errorV2: string | null;
