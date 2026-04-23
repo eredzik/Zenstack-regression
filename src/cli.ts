@@ -189,7 +189,13 @@ program
   .option("--query-id <ids...>", "Only benchmark these query id(s)")
   .option(
     "--query-id-prefix <prefix>",
-    "Only benchmark query ids whose extract file path contains this substring (e.g. benchmark-queries)"
+    "Only benchmark queries whose extract file path contains this substring (repeat flag for multiple)",
+    (val: string, prev: string[] | undefined) => {
+      const arr = prev ?? [];
+      arr.push(val);
+      return arr;
+    },
+    []
   )
   .option("--fixtures <file>", "JSON fixtures merged into each query (same as compare)")
   .option("--warmup <n>", "Warmup rounds per query per side", "2")
@@ -206,7 +212,7 @@ program
     enhanceV2: string;
     enhanceV3: string;
     queryId?: string[];
-    queryIdPrefix?: string;
+    queryIdPrefix?: string[];
     fixtures?: string;
     warmup: string;
     iterations: string;
@@ -248,7 +254,10 @@ program
       prismaClientSpecifier,
       prismaFactory,
       queryIds: opts.queryId ?? [],
-      queryIdFilePathSubstring: opts.queryIdPrefix,
+      queryIdFilePathSubstrings:
+        opts.queryIdPrefix && opts.queryIdPrefix.length ?
+          opts.queryIdPrefix
+        : undefined,
       queryFixtures,
       warmups: parseInt(opts.warmup, 10) || 0,
       iterations: parseInt(opts.iterations, 10) || 1,

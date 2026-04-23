@@ -45,6 +45,16 @@ function makeOneToOneComments(
 
 /** Same dataset as the original `seed.ts` CLI (used by PGlite benchmark and `npm run db:seed`). */
 export async function seedDemoDataset(prisma: PrismaClient): Promise<void> {
+  await prisma.taskLabel.deleteMany();
+  await prisma.workLog.deleteMany();
+  await prisma.task.deleteMany();
+  await prisma.document.deleteMany();
+  await prisma.post.updateMany({ data: { projectId: null } });
+  await prisma.project.deleteMany();
+  await prisma.teamMember.deleteMany();
+  await prisma.team.deleteMany();
+  await prisma.org.deleteMany();
+  await prisma.label.deleteMany();
   await prisma.comment.deleteMany();
   await prisma.post.deleteMany();
   await prisma.user.deleteMany();
@@ -173,11 +183,120 @@ export async function seedDemoDataset(prisma: PrismaClient): Promise<void> {
     ],
   });
 
+  // ----- Extended org / project / task graph (for schema-scale benchmarks) -----
+  await prisma.org.createMany({
+    data: [
+      { id: "org-1", name: "Acme Corp" },
+      { id: "org-2", name: "Beta LLC" },
+    ],
+  });
+  await prisma.team.createMany({
+    data: [
+      { id: "team-alpha", name: "Alpha Squad", orgId: "org-1" },
+      { id: "team-beta", name: "Beta Unit", orgId: "org-2" },
+    ],
+  });
+  await prisma.teamMember.createMany({
+    data: [
+      { id: "tm-1", teamId: "team-alpha", userId: "u1", role: "lead" },
+      { id: "tm-2", teamId: "team-alpha", userId: "u2", role: "member" },
+      { id: "tm-3", teamId: "team-beta", userId: "u6", role: "lead" },
+    ],
+  });
+  await prisma.project.createMany({
+    data: [
+      { id: "proj-alpha", teamId: "team-alpha", name: "Phoenix", weight: 10 },
+      { id: "proj-beta", teamId: "team-alpha", name: "Atlas", weight: 5 },
+    ],
+  });
+
+  await prisma.post.updateMany({
+    where: { id: { in: Array.from({ length: 30 }, (_, i) => `p${i + 1}`) } },
+    data: { projectId: "proj-alpha" },
+  });
+
+  await prisma.label.createMany({
+    data: [
+      { id: "lab-bug", name: "bug" },
+      { id: "lab-feature", name: "feature" },
+      { id: "lab-chore", name: "chore" },
+    ],
+  });
+
+  const taskRows = Array.from({ length: 24 }, (_, i) => {
+    const n = i + 1;
+    return {
+      id: `task-a${String(n).padStart(2, "0")}`,
+      projectId: "proj-alpha",
+      title: `Task ${n}`,
+      status: n % 4 === 0 ? "done" : "open",
+      assigneeId: n % 2 === 0 ? "u1" : "u2",
+    };
+  });
+  await prisma.task.createMany({ data: taskRows });
+
+  const taskLabels: Array<{ taskId: string; labelId: string }> = [];
+  for (let i = 1; i <= 24; i++) {
+    const taskId = `task-a${String(i).padStart(2, "0")}`;
+    taskLabels.push({ taskId, labelId: "lab-bug" });
+    taskLabels.push({
+      taskId,
+      labelId: i % 3 === 0 ? "lab-chore" : "lab-feature",
+    });
+  }
+  await prisma.taskLabel.createMany({ data: taskLabels });
+
+  const workLogs: Array<{
+    id: string;
+    taskId: string;
+    userId: string;
+    minutes: number;
+  }> = [];
+  for (let i = 1; i <= 12; i++) {
+    const taskId = `task-a${String(i).padStart(2, "0")}`;
+    workLogs.push({
+      id: `wl-${taskId}-1`,
+      taskId,
+      userId: "u1",
+      minutes: 15 + i,
+    });
+    workLogs.push({
+      id: `wl-${taskId}-2`,
+      taskId,
+      userId: "u2",
+      minutes: 10 + (i % 7),
+    });
+  }
+  await prisma.workLog.createMany({ data: workLogs });
+
+  await prisma.document.createMany({
+    data: [
+      {
+        id: "doc-1",
+        projectId: "proj-alpha",
+        title: "RFC-001",
+        bodyMd: "# Design\n...",
+      },
+      {
+        id: "doc-2",
+        projectId: "proj-alpha",
+        title: "Runbook",
+        bodyMd: "## Ops\n",
+      },
+      {
+        id: "doc-3",
+        projectId: "proj-beta",
+        title: "Notes",
+        bodyMd: "",
+      },
+    ],
+  });
+
   console.log(
     "Seeded: users",
     users.length,
     "| u1 posts",
     U1_POST_COUNT,
-    "+ extras | u2 posts 40 | comments bulk + edge rows"
+    "+ extras | u2 posts 40 | org graph (2 orgs, 2 projects, 24 tasks, labels, work logs)"
   );
 }

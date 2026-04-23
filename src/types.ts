@@ -106,7 +106,12 @@ export interface BenchmarkOptions {
   }>;
   /** If empty, all queries in the module are benchmarked. */
   queryIds: string[];
-  /** If set, only queries whose extracted `file` path includes this substring. */
+  /**
+   * If set, only queries whose extracted `file` path includes **any** of these
+   * substrings (e.g. `["benchmark-queries", "benchmark-scale"]`).
+   */
+  queryIdFilePathSubstrings?: string[];
+  /** @deprecated Prefer `queryIdFilePathSubstrings`; if set without substrings array, used as single filter. */
   queryIdFilePathSubstring?: string;
   queryFixtures?: Record<string, Record<string, unknown>>;
   warmups: number;

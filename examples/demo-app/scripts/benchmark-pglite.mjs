@@ -59,7 +59,10 @@ async function main() {
     prismaClientSpecifier: "@prisma/client",
     prismaFactory: createBenchmarkPrisma,
     queryIds: [],
-    queryIdFilePathSubstring: "benchmark-queries",
+    queryIdFilePathSubstrings: [
+      "benchmark-queries",
+      "benchmark-scale-queries",
+    ],
     queryFixtures: {},
     warmups: WARMUP,
     iterations: ITERATIONS,
@@ -69,36 +72,48 @@ async function main() {
   printBenchmarkSummary(rounds, json);
 
   if (!json) {
-    const benchPath = path.join(appRoot, "src", "benchmark-queries.ts");
-    const benchLines = readFileSync(benchPath, "utf8").split("\n");
-    const fnAtLine = [];
-    for (let i = 0; i < benchLines.length; i++) {
-      const m = benchLines[i].match(
-        /^\s*export\s+async\s+function\s+(\w+)\s*\(/
-      );
-      if (m) fnAtLine.push({ name: m[1], line: i + 1 });
-    }
-    function fnForExtractLine(line) {
-      let name = null;
-      for (const e of fnAtLine) {
-        if (e.line <= line) name = e.name;
-        else break;
+    function exportFnByLine(tsPath) {
+      const lines = readFileSync(tsPath, "utf8").split("\n");
+      const fnAtLine = [];
+      for (let i = 0; i < lines.length; i++) {
+        const m = lines[i].match(
+          /^\s*export\s+async\s+function\s+(\w+)\s*\(/
+        );
+        if (m) fnAtLine.push({ name: m[1], line: i + 1 });
       }
-      return name;
+      return (line) => {
+        let name = null;
+        for (const e of fnAtLine) {
+          if (e.line <= line) name = e.name;
+        }
+        return name;
+      };
     }
+
+    const resolveFn = exportFnByLine(
+      path.join(appRoot, "src", "benchmark-queries.ts")
+    );
+    const resolveScaleFn = exportFnByLine(
+      path.join(appRoot, "src", "benchmark-scale-queries.ts")
+    );
 
     const manifest = JSON.parse(
       readFileSync(path.join(cwd, ".zenstack-compare", "extract-manifest.json"), "utf8")
     );
     const idToFn = new Map();
     for (const q of manifest.queries ?? []) {
-      if (typeof q.file === "string" && q.file.includes("benchmark-queries")) {
-        idToFn.set(q.id, fnForExtractLine(q.line));
+      if (typeof q.file !== "string") continue;
+      if (q.file.includes("benchmark-scale-queries")) {
+        idToFn.set(q.id, resolveScaleFn(q.line));
+      } else if (q.file.includes("benchmark-queries")) {
+        idToFn.set(q.id, resolveFn(q.line));
       }
     }
 
     console.log("");
-    console.log("# queryId → benchmark function (src/benchmark-queries.ts)");
+    console.log(
+      "# queryId → benchmark function (src/benchmark-queries.ts | benchmark-scale-queries.ts)"
+    );
     const seen = new Set();
     for (const r of rounds) {
       if (seen.has(r.id)) continue;

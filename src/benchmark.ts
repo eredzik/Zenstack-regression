@@ -247,9 +247,14 @@ export async function runBenchmark(
     }
   } else {
     let all = queriesMod.zenstackCompareQueryList;
-    if (options.queryIdFilePathSubstring) {
-      const sub = options.queryIdFilePathSubstring;
-      all = all.filter((q) => q.meta.file.includes(sub));
+    const subs =
+      options.queryIdFilePathSubstrings?.length ?
+        options.queryIdFilePathSubstrings
+      : options.queryIdFilePathSubstring ?
+        [options.queryIdFilePathSubstring]
+      : [];
+    if (subs.length) {
+      all = all.filter((q) => subs.some((s) => q.meta.file.includes(s)));
     }
     list.push(...all);
   }
