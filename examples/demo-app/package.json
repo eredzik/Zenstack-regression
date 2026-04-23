@@ -21,7 +21,9 @@
     "demo": "npm run extract && npm run db:push && npm run db:seed && npm run compare",
     "postgres:up": "docker compose up -d postgres",
     "postgres:wait": "node scripts/wait-for-postgres.mjs",
-    "demo:postgres": "docker compose up -d postgres && export DATABASE_URL=postgresql://demo:demo@127.0.0.1:5433/zenstack_compare_demo && npm run postgres:wait && npm run extract && npm run db:push && npm run db:seed && npm run compare"
+    "demo:postgres": "docker compose up -d postgres && export DATABASE_URL=postgresql://demo:demo@127.0.0.1:5433/zenstack_compare_demo && npm run postgres:wait && npm run extract && npm run db:push && npm run db:seed && npm run compare",
+    "benchmark": "npm run zenstack:generate && npm run zenstack:v2-meta && prisma generate && npm run build-zenstack-schema && npm run extract && npm run build-queries && node ../../dist/cli.js benchmark --cwd . --queries-module ./.zenstack-compare/out/queries.js --enhance-v2 ./enhance-v2.mjs --enhance-v3 ./enhance-v3.mjs --query-id-prefix benchmark-queries --warmup 3 --iterations 25",
+    "benchmark:postgres": "docker compose up -d postgres && export DATABASE_URL=postgresql://demo:demo@127.0.0.1:5433/zenstack_compare_demo && npm run postgres:wait && npm run db:push && npm run db:seed && npm run benchmark"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0"

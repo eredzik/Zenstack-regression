@@ -5,6 +5,7 @@ import { Command } from "commander";
 import { buildManifest, defaultPrismaQueryMethods } from "./extract.js";
 import { writeQueriesTs } from "./codegen.js";
 import { runCompare } from "./compare.js";
+import { runBenchmark } from "./benchmark.js";
 import { loadQueryFixtures, writeFixturesTemplate } from "./fixtures.js";
 import {
   generateFakerSeedScriptFromDmmf,
@@ -99,6 +100,36 @@ program
     }
   });
 
+function summarizeMs(values: number[]): {
+  n: number;
+  mean: number;
+  median: number;
+  p95: number;
+  min: number;
+  max: number;
+} {
+  const sorted = [...values].sort((a, b) => a - b);
+  const n = sorted.length;
+  if (n === 0) {
+    return { n: 0, mean: 0, median: 0, p95: 0, min: 0, max: 0 };
+  }
+  const sum = sorted.reduce((a, b) => a + b, 0);
+  const mean = sum / n;
+  const mid = Math.floor(n / 2);
+  const median =
+    n % 2 === 0 ? (sorted[mid - 1]! + sorted[mid]!) / 2 : sorted[mid]!;
+  const p95Idx = Math.min(n - 1, Math.ceil(n * 0.95) - 1);
+  const p95 = sorted[p95Idx]!;
+  return {
+    n,
+    mean,
+    median,
+    p95,
+    min: sorted[0]!,
+    max: sorted[n - 1]!,
+  };
+}
+
 program
   .command("compare")
   .description(
@@ -170,6 +201,100 @@ program
       json: opts.json,
       queryFixtures,
     });
+  });
+
+program
+  .command("benchmark")
+  .description(
+    "Time ZenStack v2 vs v3 for each query (interleaved rounds; wall-clock per side)"
+  )
+  .requiredOption(
+    "--queries-module <spec>",
+    "Path or URL to generated queries module (e.g. ./.zenstack-compare/out/queries.js)"
+  )
+  .option("--cwd <dir>", "Working directory", process.cwd())
+  .option("--prisma-client <spec>", "PrismaClient import", "@prisma/client")
+  .option("--enhance-v2 <spec>", "ZenStack v2 enhance module", "@zenstackhq/runtime")
+  .option("--enhance-v3 <spec>", "ZenStack v3 enhance module", "@zenstackhq/runtime")
+  .option("--query-id <ids...>", "Only benchmark these query id(s)")
+  .option(
+    "--query-id-prefix <prefix>",
+    "Only benchmark query ids whose extract file path contains this substring (e.g. benchmark-queries)"
+  )
+  .option("--fixtures <file>", "JSON fixtures merged into each query (same as compare)")
+  .option("--warmup <n>", "Warmup rounds per query per side", "2")
+  .option("--iterations <n>", "Timed iterations per query", "30")
+  .option("--json", "Print machine-readable JSON", false)
+  .action(async (opts: {
+    queriesModule: string;
+    cwd: string;
+    prismaClient: string;
+    enhanceV2: string;
+    enhanceV3: string;
+    queryId?: string[];
+    queryIdPrefix?: string;
+    fixtures?: string;
+    warmup: string;
+    iterations: string;
+    json: boolean;
+  }) => {
+    const cwd = path.resolve(opts.cwd);
+    const queriesModule = toImportUrl(opts.queriesModule, cwd);
+    const enhanceV2 = toImportUrl(opts.enhanceV2, cwd);
+    const enhanceV3 = toImportUrl(opts.enhanceV3, cwd);
+    const prismaClientSpecifier = opts.prismaClient.startsWith(".")
+      ? toImportUrl(opts.prismaClient, cwd)
+      : opts.prismaClient;
+    const queryFixtures = loadQueryFixtures(opts.fixtures);
+
+    const rounds = await runBenchmark({
+      cwd,
+      queriesModule,
+      enhanceV2Module: enhanceV2,
+      enhanceV3Module: enhanceV3,
+      prismaClientSpecifier,
+      queryIds: opts.queryId ?? [],
+      queryIdFilePathSubstring: opts.queryIdPrefix,
+      queryFixtures,
+      warmups: parseInt(opts.warmup, 10) || 0,
+      iterations: parseInt(opts.iterations, 10) || 1,
+    });
+
+    if (opts.json) {
+      console.log(JSON.stringify(rounds, null, 2));
+      return;
+    }
+
+    const byId = new Map<string, typeof rounds>();
+    for (const r of rounds) {
+      const arr = byId.get(r.id) ?? [];
+      arr.push(r);
+      byId.set(r.id, arr);
+    }
+
+    console.log(
+      "queryId\tv2_median_ms\tv3_median_ms\tratio_v3/v2\tv2_sql_n\tv3_sql_n\terrors"
+    );
+    for (const [id, rs] of [...byId.entries()].sort((a, b) =>
+      a[0].localeCompare(b[0])
+    )) {
+      const v2ok = rs.filter((x) => !x.errorV2).map((x) => x.v2Ms);
+      const v3ok = rs.filter((x) => !x.errorV3).map((x) => x.v3Ms);
+      const s2 = summarizeMs(v2ok);
+      const s3 = summarizeMs(v3ok);
+      const ratio =
+        s2.median > 0 && s3.median > 0
+          ? (s3.median / s2.median).toFixed(3)
+          : "n/a";
+      const err = rs.some((x) => x.errorV2 || x.errorV3) ? "yes" : "no";
+      const sql2Row = rs.find((x) => !x.errorV2);
+      const sql3Row = rs.find((x) => !x.errorV3);
+      const sql2 = sql2Row?.v2SqlCount ?? 0;
+      const sql3 = sql3Row?.v3SqlCount ?? 0;
+      console.log(
+        `${id}\t${s2.median.toFixed(3)}\t${s3.median.toFixed(3)}\t${ratio}\t${sql2}\t${sql3}\t${err}`
+      );
+    }
   });
 
 program

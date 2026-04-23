@@ -59,3 +59,29 @@ export interface CompareOptions {
    */
   queryFixtures?: Record<string, Record<string, unknown>>;
 }
+
+/** One timed round for a single query id on both ZenStack sides (v2 then v3). */
+export interface BenchmarkRoundRow {
+  id: string;
+  v2Ms: number;
+  v3Ms: number;
+  v2SqlCount: number;
+  v3SqlCount: number;
+  errorV2: string | null;
+  errorV3: string | null;
+}
+
+export interface BenchmarkOptions {
+  cwd: string;
+  queriesModule: string;
+  enhanceV2Module: string;
+  enhanceV3Module: string;
+  prismaClientSpecifier: string;
+  /** If empty, all queries in the module are benchmarked. */
+  queryIds: string[];
+  /** If set, only queries whose extracted `file` path includes this substring. */
+  queryIdFilePathSubstring?: string;
+  queryFixtures?: Record<string, Record<string, unknown>>;
+  warmups: number;
+  iterations: number;
+}
