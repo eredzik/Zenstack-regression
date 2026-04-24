@@ -5,13 +5,13 @@ import type { ExtractManifest } from "./types.js";
 export type QueryFixturesFile = {
   /** Optional seed for @faker-js/faker (integer). */
   fakerSeed?: number;
-  /** Per extracted query id: deep-merge patch for the Prisma call's first argument. */
+  /** Per extracted query id: params object for generated runQuery(db, params). */
   queries: Record<string, Record<string, unknown>>;
 };
 
 export function loadQueryFixtures(
   filePath: string | undefined
-): Record<string, Record<string, unknown>> | undefined {
+): QueryFixturesFile["queries"] | undefined {
   if (!filePath) return undefined;
   const abs = path.resolve(filePath);
   const raw = fs.readFileSync(abs, "utf8");
@@ -26,13 +26,14 @@ export function writeFixturesTemplate(
   const manifest = JSON.parse(
     fs.readFileSync(path.resolve(manifestPath), "utf8")
   ) as ExtractManifest;
-  const queries: Record<string, Record<string, unknown> | null> = {};
+  const queries: Record<string, Record<string, unknown>> = {};
   for (const q of manifest.queries) {
-    queries[q.id] = null;
+    const params = Object.fromEntries(q.params.map((p) => [p.name, null]));
+    queries[q.id] = params as Record<string, unknown>;
   }
   const doc: QueryFixturesFile = {
     fakerSeed: 42,
-    queries: queries as Record<string, Record<string, unknown>>,
+    queries,
   };
   fs.mkdirSync(path.dirname(path.resolve(outPath)), { recursive: true });
   fs.writeFileSync(

@@ -22,10 +22,6 @@ const { runCompare } = await import(
   pathToFileURL(path.join(repoRoot, "dist", "compare.js")).href
 );
 
-const queriesModule = pathToFileURL(
-  path.join(appRoot, ".zenstack-compare", "out", "queries.js")
-).href;
-
 const fixturesPath =
   process.env.ZS_FIXTURES ??
   (fs.existsSync(path.join(appRoot, ".zenstack-compare", "query-fixtures.json"))
@@ -42,9 +38,13 @@ if (fixturesPath) {
 
 const rows = await runCompare({
   cwd: appRoot,
-  queriesModule,
-  enhanceV2Module: pathToFileURL(path.join(appRoot, "enhance-v2.mjs")).href,
-  enhanceV3Module: pathToFileURL(path.join(appRoot, "enhance-v3.mjs")).href,
+  queriesDir: path.join(appRoot, ".zenstack-compare", "queries"),
+  enhanceV2Module: pathToFileURL(
+    path.join(appRoot, ".zenstack-compare", "enhance-v2.mjs")
+  ).href,
+  enhanceV3Module: pathToFileURL(
+    path.join(appRoot, ".zenstack-compare", "enhance-v3.mjs")
+  ).href,
   prismaClientSpecifier: "@prisma/client",
   json: false,
   silent: true,

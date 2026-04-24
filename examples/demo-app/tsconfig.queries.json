@@ -8,5 +8,5 @@
     "rootDir": ".zenstack-compare",
     "outDir": ".zenstack-compare/out"
   },
-  "include": [".zenstack-compare/queries.ts"]
+  "include": [".zenstack-compare/queries/**/*.ts"]
 }

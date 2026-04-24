@@ -5,7 +5,7 @@ This example runs the query harness **twice**:
 1. **v2** — `@zenstackhq/runtime-v2` `createEnhancement` wrapping **Prisma** (open policy guards + `modelMeta` derived from Prisma DMMF).
 2. **v3** — `@zenstackhq/orm` **`ZenStackClient`** over **better-sqlite3** / Kysely, using the schema compiled from `zenstack/schema.zmodel`.
 
-Both sides use the same **`DATABASE_URL`**. The default workflow uses **PostgreSQL in Docker** (`docker compose`); set `DATABASE_URL` (see `.env.example`). If `DATABASE_URL` is a `file:` URL or unset, v3 falls back to **SQLite** in `enhance-v3.mjs` while Prisma still follows `schema.prisma` — use Postgres for the full demo.
+Both sides use the same **`DATABASE_URL`**. The default workflow uses **PostgreSQL in Docker** (`docker compose`); set `DATABASE_URL` (see `.env.example`). If `DATABASE_URL` is a `file:` URL or unset, v3 falls back to **SQLite** in `.zenstack-compare/enhance-v3.mjs` while Prisma still follows `schema.prisma` — use Postgres for the full demo.
 
 ## Source layout for extraction
 
@@ -71,17 +71,17 @@ If **`docker` is not installed**, use any PostgreSQL 16 instance and set `DATABA
 
 1. **`npm run extract`** → **`npm run seed:faker:gen`** (from repo root, **`npm run build`** first).
 2. **`npm run db:push`** → **`npm run seed:faker`** — creates **`N`** rows per model with FK wiring (nullable FKs sometimes `null`).
-3. **`npm run fixtures:template`** → copy to **`.zenstack-compare/query-fixtures.json`** and fill **`queries.<id>`** with deep-merge patches (e.g. **`{ "where": { "id": "<real-user-id>" } }`**). Example at repo root: **`query-fixtures.json.example`**.
+3. **`npm run fixtures:template`** → copy to **`.zenstack-compare/query-fixtures.json`** and fill **`queries.<id>`** with generated function params (for example `{ "userId": "<real-user-id>" }`).
 4. **`compare`** / **`compare:report`** loads **`.zenstack-compare/query-fixtures.json`** if it exists; override with **`ZS_FIXTURES=relative-or-abs-path`**.
 
-Generated **`queries.ts`** calls **`__mergeQueryArgs(extractedArgs, queryArgs)`** so runtime patches overlay the verbatim source.
+Generated query modules export **`runQuery(db, params)`** and execute extracted Prisma calls directly (no runtime arg merging).
 
 Extra regression-style queries (nested orderBy, **AND**/**OR**/**NOT**, relation filters, aggregates) are in **`src/regression-surface.ts`**. See **`COMPARE_REPORT.md`** for how to regenerate a summary.
 
 ## Files
 
-- **`enhance-v2.mjs`** — `createEnhancement` + open policy; `prismaModule` from CJS `@prisma/client`.
-- **`enhance-v3.mjs`** — `ZenStackClient` + optional `sqlCapture` from compare runner.
+- **`.zenstack-compare/enhance-v2.mjs`** — generated v2 enhancement entrypoint.
+- **`.zenstack-compare/enhance-v3.mjs`** — generated v3 enhancement entrypoint.
 - **`scripts/build-model-meta.mjs`** — v2 metadata keys in **camelCase** (`user`, `post`, …).
 
 ## Package version note

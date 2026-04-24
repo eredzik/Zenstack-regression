@@ -1,10 +1,23 @@
 import path from "node:path";
+import fs from "node:fs";
+import os from "node:os";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
+import ts from "typescript";
 import type { CompareOptions } from "./types.js";
 
 export type CompareRow = {
   id: string;
+  meta: {
+    id: string;
+    file?: string;
+    line?: number;
+    column?: number;
+    dbAlias?: string;
+    model?: string;
+    method?: string;
+  };
+  querySourceTs: string;
   ok: boolean;
   sqlV2: string[];
   sqlV3: string[];
@@ -19,6 +32,97 @@ export type CompareRow = {
   errorV2: string | null;
   errorV3: string | null;
 };
+
+type LoadedQueryBundle = {
+  meta: {
+    id: string;
+    file?: string;
+    line?: number;
+    column?: number;
+    dbAlias?: string;
+    model?: string;
+    method?: string;
+  };
+  querySourceTs: string;
+  run: (db: unknown, params?: Record<string, unknown>) => Promise<unknown>;
+};
+
+function toQueryDetailMarkdown(r: CompareRow): string {
+  const lines: string[] = [];
+  lines.push(`# Query ${r.id}`);
+  lines.push("");
+  lines.push(`- file: ${r.meta.file ?? "unknown"}`);
+  lines.push(`- line: ${r.meta.line ?? "unknown"}`);
+  lines.push(`- column: ${r.meta.column ?? "unknown"}`);
+  lines.push(`- dbAlias: ${r.meta.dbAlias ?? "unknown"}`);
+  lines.push(`- model: ${r.meta.model ?? "unknown"}`);
+  lines.push(`- method: ${r.meta.method ?? "unknown"}`);
+  lines.push(`- sqlMatch: ${r.sqlMatch}`);
+  lines.push(`- resultsMatch: ${r.resultsMatch}`);
+  lines.push(`- recordCountV2: ${r.recordCountV2 ?? "n/a"}`);
+  lines.push(`- recordCountV3: ${r.recordCountV3 ?? "n/a"}`);
+  lines.push(`- recordCountsMatch: ${r.recordCountsMatch}`);
+  if (r.errorV2) lines.push(`- errorV2: ${r.errorV2}`);
+  if (r.errorV3) lines.push(`- errorV3: ${r.errorV3}`);
+  lines.push("");
+  lines.push("## Original Query (TypeScript)");
+  lines.push("");
+  lines.push("```ts");
+  lines.push(r.querySourceTs.trim() || "// query source unavailable");
+  lines.push("```");
+  lines.push("");
+  lines.push("## SQL v2");
+  lines.push("");
+  lines.push("```sql");
+  lines.push(r.sqlV2.length ? r.sqlV2.join(";\n\n") : "-- no SQL captured --");
+  lines.push("```");
+  lines.push("");
+  lines.push("## SQL v3");
+  lines.push("");
+  lines.push("```sql");
+  lines.push(r.sqlV3.length ? r.sqlV3.join(";\n\n") : "-- no SQL captured --");
+  lines.push("```");
+  lines.push("");
+  return lines.join("\n");
+}
+
+function toSummaryMarkdown(rows: CompareRow[], reportsDirName: string): string {
+  const failing = rows.filter((r) => !r.resultsMatch);
+  const succeeding = rows.filter((r) => r.resultsMatch);
+  const lines: string[] = [];
+  lines.push("# ZenStack Compare Report");
+  lines.push("");
+  lines.push(`Generated at: ${new Date().toISOString()}`);
+  lines.push(`Total queries: ${rows.length}`);
+  lines.push(`Failing queries (results not matching): ${failing.length}`);
+  lines.push(`Succeeding queries: ${succeeding.length}`);
+  lines.push("");
+  lines.push("## Failing Queries");
+  lines.push("");
+  if (failing.length === 0) {
+    lines.push("- none");
+  } else {
+    for (const r of failing) {
+      lines.push(
+        `- [${r.id}](${reportsDirName}/${r.id}.md) - ${r.meta.file ?? "unknown"}:${r.meta.line ?? "?"}`
+      );
+    }
+  }
+  lines.push("");
+  lines.push("## Succeeding Queries");
+  lines.push("");
+  if (succeeding.length === 0) {
+    lines.push("- none");
+  } else {
+    for (const r of succeeding) {
+      lines.push(
+        `- [${r.id}](${reportsDirName}/${r.id}.md) - ${r.meta.file ?? "unknown"}:${r.meta.line ?? "?"}`
+      );
+    }
+  }
+  lines.push("");
+  return lines.join("\n");
+}
 
 function stableStringify(value: unknown): string {
   const seen = new WeakSet<object>();
@@ -95,6 +199,21 @@ async function importFromProject(
   return import(pathToFileURL(resolved).href);
 }
 
+function transpileTsToJs(sourcePath: string, outPath: string): void {
+  const source = fs.readFileSync(sourcePath, "utf8");
+  const transpiled = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+      moduleResolution: ts.ModuleResolutionKind.Bundler,
+      sourceMap: false,
+      inlineSourceMap: false,
+    },
+    fileName: sourcePath,
+  });
+  fs.writeFileSync(outPath, transpiled.outputText, "utf8");
+}
+
 export async function runCompare(options: CompareOptions): Promise<CompareRow[]> {
   const cwd = path.resolve(options.cwd);
   const prismaMod = (await importFromProject(
@@ -128,25 +247,71 @@ export async function runCompare(options: CompareOptions): Promise<CompareRow[]>
     ) => Record<string, unknown>;
   };
 
-  const queriesMod = (await importFromProject(options.queriesModule, cwd)) as {
-    zenstackCompareQueries: Record<
-      string,
-      {
-        meta: { id: string };
-        run: (
-          db: unknown,
-          queryArgs?: Record<string, unknown>
-        ) => Promise<unknown>;
+  const queriesDir = path.isAbsolute(options.queriesDir)
+    ? options.queriesDir
+    : path.resolve(cwd, options.queriesDir);
+  let queryFiles = fs
+    .readdirSync(queriesDir)
+    .filter(
+      (f) =>
+        (f.endsWith(".ts") ||
+          f.endsWith(".js") ||
+          f.endsWith(".mjs") ||
+          f.endsWith(".cjs")) &&
+        f !== "_shared.ts" &&
+        f !== "_shared.js" &&
+        f !== "_shared.mjs" &&
+        f !== "_shared.cjs"
+    )
+    .sort();
+  if (options.queryIds?.length) {
+    const wanted = new Set(options.queryIds);
+    queryFiles = queryFiles.filter((f) => wanted.has(path.parse(f).name));
+  }
+
+  const hasTsQueries = queryFiles.some((f) => f.endsWith(".ts"));
+  let runtimeQueriesDir = queriesDir;
+  if (hasTsQueries) {
+    runtimeQueriesDir = fs.mkdtempSync(path.join(os.tmpdir(), "zenstack-compare-queries-"));
+    const sharedTs = path.join(queriesDir, "_shared.ts");
+    if (fs.existsSync(sharedTs)) {
+      transpileTsToJs(sharedTs, path.join(runtimeQueriesDir, "_shared.js"));
+    }
+    for (const f of queryFiles) {
+      const src = path.join(queriesDir, f);
+      if (f.endsWith(".ts")) {
+        transpileTsToJs(src, path.join(runtimeQueriesDir, `${path.parse(f).name}.js`));
+      } else {
+        fs.copyFileSync(src, path.join(runtimeQueriesDir, f));
       }
-    >;
-    zenstackCompareQueryList: Array<{
-      meta: { id: string };
-      run: (
-        db: unknown,
-        queryArgs?: Record<string, unknown>
-      ) => Promise<unknown>;
-    }>;
-  };
+    }
+  }
+
+  const bundles: LoadedQueryBundle[] = [];
+  for (const queryFile of queryFiles) {
+    const queryPath = path.join(queriesDir, queryFile);
+    const runtimeFile = hasTsQueries && queryFile.endsWith(".ts")
+      ? `${path.parse(queryFile).name}.js`
+      : queryFile;
+    const mod = (await import(pathToFileURL(path.join(runtimeQueriesDir, runtimeFile)).href)) as {
+      queryMeta?: {
+        id: string;
+        file?: string;
+        line?: number;
+        column?: number;
+        dbAlias?: string;
+        model?: string;
+        method?: string;
+      };
+      default?: (db: unknown, params?: Record<string, unknown>) => Promise<unknown>;
+    };
+    if (!mod.queryMeta?.id || typeof mod.default !== "function") continue;
+    bundles.push({
+      meta: mod.queryMeta,
+      run: mod.default,
+      querySourceTs: fs.readFileSync(queryPath, "utf8"),
+    });
+  }
 
   const prisma = new PrismaClient({
     log: [{ level: "query", emit: "event" }],
@@ -163,22 +328,8 @@ export async function runCompare(options: CompareOptions): Promise<CompareRow[]>
   const rows: CompareRow[] = [];
   const fixtures = options.queryFixtures ?? {};
 
-  const list: Array<{
-    meta: { id: string };
-    run: (
-      db: unknown,
-      queryArgs?: Record<string, unknown>
-    ) => Promise<unknown>;
-  }> = [];
-
-  if (options.queryIds?.length) {
-    for (const id of options.queryIds) {
-      const b = queriesMod.zenstackCompareQueries[id];
-      if (b) list.push(b);
-    }
-  } else {
-    list.push(...queriesMod.zenstackCompareQueryList);
-  }
+  const list: LoadedQueryBundle[] = [];
+  list.push(...bundles);
 
   for (const bundle of list) {
     const id = bundle.meta.id;
@@ -190,12 +341,12 @@ export async function runCompare(options: CompareOptions): Promise<CompareRow[]>
     let resultV2: unknown;
     let resultV3: unknown;
 
-    const queryArgs = fixtures[id];
+    const params = (fixtures[id] ?? {}) as Record<string, unknown>;
 
     try {
       const db2 = enhanceV2.enhance(prisma, undefined, undefined) as unknown;
       sqlCaptureV2.length = 0;
-      resultV2 = await bundle.run(db2, queryArgs);
+      resultV2 = await bundle.run(db2, params);
       sqlV2.push(...sqlCaptureV2);
     } catch (e) {
       errorV2 = e instanceof Error ? e.message : String(e);
@@ -206,7 +357,7 @@ export async function runCompare(options: CompareOptions): Promise<CompareRow[]>
       const db3 = enhanceV3.enhance(prisma, undefined, {
         sqlCapture: sqlCaptureV3,
       }) as unknown;
-      resultV3 = await bundle.run(db3, queryArgs);
+      resultV3 = await bundle.run(db3, params);
       sqlV3.push(...sqlCaptureV3);
     } catch (e) {
       errorV3 = e instanceof Error ? e.message : String(e);
@@ -232,6 +383,8 @@ export async function runCompare(options: CompareOptions): Promise<CompareRow[]>
 
     rows.push({
       id,
+      meta: bundle.meta,
+      querySourceTs: bundle.querySourceTs,
       ok,
       sqlV2,
       sqlV3,
@@ -249,11 +402,27 @@ export async function runCompare(options: CompareOptions): Promise<CompareRow[]>
 
   await prisma.$disconnect();
 
+  if (options.markdownOutputFile) {
+    const mdPath = path.isAbsolute(options.markdownOutputFile)
+      ? options.markdownOutputFile
+      : path.resolve(cwd, options.markdownOutputFile);
+    const reportsDirName = `${path.basename(mdPath, path.extname(mdPath))}-queries`;
+    const reportsDir = path.join(path.dirname(mdPath), reportsDirName);
+    fs.mkdirSync(reportsDir, { recursive: true });
+    for (const r of rows) {
+      fs.writeFileSync(path.join(reportsDir, `${r.id}.md`), toQueryDetailMarkdown(r), "utf8");
+    }
+    fs.mkdirSync(path.dirname(mdPath), { recursive: true });
+    fs.writeFileSync(mdPath, toSummaryMarkdown(rows, reportsDirName), "utf8");
+  }
+
   if (options.silent) {
     return rows;
   }
 
-  if (!options.json) {
+  if (options.markdownOutputFile) {
+    console.log(`Wrote ${path.resolve(cwd, options.markdownOutputFile)}`);
+  } else if (!options.json) {
     for (const r of rows) {
       const status = r.ok ? "OK" : "DIFF";
       console.log(`[${status}] ${r.id}`);

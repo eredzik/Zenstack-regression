@@ -80,13 +80,33 @@ export async function commentsWhereOrNullOrPrefix(db: PrismaClient) {
 export async function usersWhereOrRelationOrEmail(db: PrismaClient) {
   return db.user.findMany({
     where: {
-      OR: [
-        { posts: { some: { sequence: 1 } } },
-        { email: { contains: "u2" } },
-      ],
+      OR: [{ posts: { some: { sequence: 1 } } }, { email: { contains: "u2" } }],
     },
     orderBy: { id: "asc" },
     select: { id: true, email: true },
+  });
+}
+
+/** User: top-level OR mixing relation and scalar. */
+export async function usersWithCommentsOrSth(db: PrismaClient) {
+  return db.post.findMany({
+    where: {
+      id: {in: ["p1", "p2"]}
+    },
+    select: {
+      id: true,
+      comments: {
+        where: {
+          authorId: "u1",
+          
+
+        },
+        select: {
+          id: true,
+          content: true,
+        }
+      }
+    },
   });
 }
 

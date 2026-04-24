@@ -13,6 +13,15 @@ export interface ExtractedQuery {
   arg0Source: string | null;
   /** Full argument list source inside (...) */
   argsSource: string;
+  /** Variables captured from lexical scope and required to run this query in isolation */
+  params: ExtractedParam[];
+}
+
+export interface ExtractedParam {
+  name: string;
+  typeText: string;
+  isOptional?: boolean;
+  origin?: "identifier";
 }
 
 export interface ExtractManifest {
@@ -40,7 +49,7 @@ export interface ExtractOptions {
 
 export interface CompareOptions {
   cwd: string;
-  queriesModule: string;
+  queriesDir: string;
   enhanceV2Module: string;
   enhanceV3Module: string;
   prismaClientSpecifier: string;
@@ -53,8 +62,10 @@ export interface CompareOptions {
   ignoreSqlDiff?: boolean;
   /** Skip printing to stdout (for programmatic use). */
   silent?: boolean;
+  /** If set, write a markdown report (metadata + SQL only). */
+  markdownOutputFile?: string;
   /**
-   * Per query id: deep-merge into the extracted Prisma call's first argument.
+   * Per query id: params object for generated runQuery(db, params).
    * From JSON file: use `loadQueryFixtures` or `--fixtures` on the CLI.
    */
   queryFixtures?: Record<string, Record<string, unknown>>;

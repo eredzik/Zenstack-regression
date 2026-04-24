@@ -3,7 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { Command } from "commander";
 import { buildManifest, defaultPrismaQueryMethods } from "./extract.js";
-import { writeQueriesTs } from "./codegen.js";
+import { writeQueriesDir } from "./codegen.js";
 import { runCompare } from "./compare.js";
 import { loadQueryFixtures, writeFixturesTemplate } from "./fixtures.js";
 import {
@@ -31,7 +31,7 @@ program
 
 program
   .command("extract")
-  .description("Scan a codebase and write queries.ts + extract-manifest.json")
+  .description("Scan a codebase and write query files + extract-manifest.json")
   .requiredOption("--root <dir>", "Project root to scan")
   .option(
     "--include <globs...>",
@@ -82,10 +82,10 @@ program
     const outDir = path.isAbsolute(opts.out)
       ? opts.out
       : path.join(root, opts.out);
-    const tsPath = writeQueriesTs(outDir, manifest, {
+    const queriesDir = writeQueriesDir(outDir, manifest, {
       transactionAliases: opts.txAlias,
     });
-    console.log(`Wrote ${tsPath}`);
+    console.log(`Wrote ${queriesDir}`);
     console.log(`Wrote ${path.join(outDir, "extract-manifest.json")}`);
     console.log(`Extracted ${manifest.queries.length} query call sites.`);
     if (manifest.zmodelFiles.length) {
@@ -105,8 +105,8 @@ program
     "Run extracted queries against Prisma with two enhance() implementations and diff SQL + results"
   )
   .requiredOption(
-    "--queries-module <spec>",
-    "Path or URL to generated queries module (e.g. ./.zenstack-compare/queries.ts)"
+    "--queries-dir <dir>",
+    "Path to generated query module directory (e.g. ./.zenstack-compare/queries)"
   )
   .option(
     "--cwd <dir>",
@@ -136,11 +136,15 @@ program
   )
   .option(
     "--fixtures <file>",
-    "JSON file: { queries: { [queryId]: { where: {...} } }, fakerSeed? } merged into each extracted call"
+    "JSON file: { queries: { [queryId]: { ...params } }, fakerSeed? } passed as `params` to runQuery(db, params)"
   )
   .option("--json", "Print machine-readable JSON", false)
+  .option(
+    "--md-out <file>",
+    "Write markdown report with metadata + SQL only (omits JSON results/errors payloads)"
+  )
   .action(async (opts: {
-    queriesModule: string;
+    queriesDir: string;
     cwd: string;
     prismaClient: string;
     enhanceV2: string;
@@ -149,9 +153,9 @@ program
     ignoreSqlDiff: boolean;
     fixtures?: string;
     json: boolean;
+    mdOut?: string;
   }) => {
     const cwd = path.resolve(opts.cwd);
-    const queriesModule = toImportUrl(opts.queriesModule, cwd);
     const enhanceV2 = toImportUrl(opts.enhanceV2, cwd);
     const enhanceV3 = toImportUrl(opts.enhanceV3, cwd);
     const prismaClientSpecifier = opts.prismaClient.startsWith(".")
@@ -161,7 +165,7 @@ program
 
     await runCompare({
       cwd,
-      queriesModule,
+      queriesDir: opts.queriesDir,
       enhanceV2Module: enhanceV2,
       enhanceV3Module: enhanceV3,
       prismaClientSpecifier,
@@ -169,6 +173,7 @@ program
       ignoreSqlDiff: opts.ignoreSqlDiff,
       json: opts.json,
       queryFixtures,
+      markdownOutputFile: opts.mdOut,
     });
   });
 

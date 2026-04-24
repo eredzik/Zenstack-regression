@@ -10,23 +10,23 @@ import type { PrismaClient } from "@prisma/client";
 /** Params mirror a real API; literals in the query keep generated runners self-contained. */
 export async function listPostsForAuthor(
   db: PrismaClient,
-  _authorId: string,
-  _take: number
+  authorId: string,
+  take: number
 ) {
   return db.post.findMany({
-    where: { authorId: "u1" },
+    where: { authorId: authorId },
     orderBy: { sequence: "desc" },
-    take: 5,
+    take: take,
     select: { id: true, title: true, sequence: true },
   });
 }
 
 export async function countPostsForAuthor(
   db: PrismaClient,
-  _authorId: string
+  authorId: string
 ) {
   return db.post.count({
-    where: { authorId: "u1" },
+    where: { authorId: authorId },
   });
 }
 
@@ -40,18 +40,18 @@ export async function getFirstCommentWithPost(db: PrismaClient) {
   });
 }
 
-export async function groupPostsByAuthorEmail(db: PrismaClient) {
+export async function groupPostsByAuthorEmail(db: PrismaClient, authorId: string) {
   return db.post.groupBy({
     by: ["authorId"],
-    where: { authorId: "u1" },
+    where: { authorId: authorId },
     _count: { id: true },
     _max: { sequence: true },
   });
 }
 
 /** Transaction client `tx` — generated harness wraps in `db.$transaction`. */
-export async function countUsersInTransaction(db: PrismaClient) {
-  return db.$transaction(async (tx) => {
+export async function countUsersInTransaction(db: PrismaClient): Promise<number> {
+  return db.$transaction(async (tx: PrismaClient) => {
     return tx.user.count();
   });
 }
