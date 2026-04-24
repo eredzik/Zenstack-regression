@@ -59,3 +59,67 @@ export interface CompareOptions {
    */
   queryFixtures?: Record<string, Record<string, unknown>>;
 }
+
+/** One timed round for a single query id on both ZenStack sides (v2 then v3). */
+export interface BenchmarkRoundRow {
+  id: string;
+  /** Wall-clock time for the full `run()` (ORM + DB + result shaping). */
+  v2Ms: number;
+  v3Ms: number;
+  /**
+   * Sum of Prisma engine-reported `duration` (ms) per SQL round-trip in this iteration.
+   * Approximates time inside the DB driver / engine for that work unit.
+   */
+  v2DbMs: number | null;
+  /** Sum of Kysely `queryDurationMillis` per logged query (ZenStack v3 / Kysely path). */
+  v3DbMs: number | null;
+  /**
+   * Wall minus summed DB-reported time, clamped at 0. Captures client-side work
+   * (serialization, relation assembly, JS overhead). Not perfectly disjoint from DB.
+   */
+  v2JsMs: number | null;
+  v3JsMs: number | null;
+  v2SqlCount: number;
+  v3SqlCount: number;
+  errorV2: string | null;
+  errorV3: string | null;
+}
+
+export interface BenchmarkOptions {
+  cwd: string;
+  queriesModule: string;
+  enhanceV2Module: string;
+  enhanceV3Module: string;
+  /**
+   * When `prismaFactory` is set, used only if the factory is not provided.
+   * Ignored when `prismaFactory` builds the client (e.g. PGlite + adapter).
+   */
+  prismaClientSpecifier: string;
+  /**
+   * Optional async factory (e.g. Prisma + PGlite driver adapter). When set,
+   * `new PrismaClient()` from `prismaClientSpecifier` is not used.
+   */
+  prismaFactory?: () => Promise<{
+    $connect: () => Promise<void>;
+    $disconnect: () => Promise<void>;
+    $on: (event: string, cb: (e: unknown) => void) => void;
+  }>;
+  /** If empty, all queries in the module are benchmarked. */
+  queryIds: string[];
+  /**
+   * If set, only queries whose extracted `file` path includes **any** of these
+   * substrings (e.g. `["benchmark-queries", "benchmark-scale"]`).
+   */
+  queryIdFilePathSubstrings?: string[];
+  /** @deprecated Prefer `queryIdFilePathSubstrings`; if set without substrings array, used as single filter. */
+  queryIdFilePathSubstring?: string;
+  queryFixtures?: Record<string, Record<string, unknown>>;
+  warmups: number;
+  iterations: number;
+  /**
+   * How many identical `run()` calls execute in parallel per side per iteration (`Promise.all`).
+   * Wall time is batch completion (time until all copies finish). SQL/db metrics are summed
+   * across all copies. Omit or 1 = sequential (same as before).
+   */
+  concurrency?: number;
+}

@@ -9,6 +9,7 @@
   "exports": {
     ".": "./dist/cli.js",
     "./compare": "./dist/compare.js",
+    "./benchmark": "./dist/benchmark.js",
     "./merge": "./dist/merge.js"
   },
   "scripts": {
