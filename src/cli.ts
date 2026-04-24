@@ -131,6 +131,10 @@ program
   )
   .option("--query-id <ids...>", "Only run specific extracted query id(s)")
   .option(
+    "--query-name <names...>",
+    "Only run queries whose extracted enclosing function name matches one of these"
+  )
+  .option(
     "--ignore-sql-diff",
     "Treat rows as OK when results match and both sides have no errors, even if SQL text differs",
     false
@@ -151,6 +155,7 @@ program
     enhanceV2: string;
     enhanceV3: string;
     queryId?: string[];
+    queryName?: string[];
     ignoreSqlDiff: boolean;
     fixtures?: string;
     json: boolean;
@@ -171,6 +176,7 @@ program
       enhanceV3Module: enhanceV3,
       prismaClientSpecifier,
       queryIds: opts.queryId,
+      queryNames: opts.queryName,
       ignoreSqlDiff: opts.ignoreSqlDiff,
       json: opts.json,
       queryFixtures,
@@ -192,6 +198,10 @@ program
   .option("--enhance-v2 <spec>", "ZenStack v2 enhance module", "@zenstackhq/runtime")
   .option("--enhance-v3 <spec>", "ZenStack v3 enhance module", "@zenstackhq/runtime")
   .option("--query-id <ids...>", "Only benchmark these query id(s)")
+  .option(
+    "--query-name <names...>",
+    "Only benchmark queries whose extracted enclosing function name matches one of these"
+  )
   .option(
     "--query-id-prefix <prefix>",
     "Only benchmark queries whose extract file path contains this substring (repeat flag for multiple)",
@@ -222,6 +232,7 @@ program
     enhanceV2: string;
     enhanceV3: string;
     queryId?: string[];
+    queryName?: string[];
     queryIdPrefix?: string[];
     fixtures?: string;
     warmup: string;
@@ -267,6 +278,7 @@ program
       prismaClientSpecifier,
       prismaFactory,
       queryIds: opts.queryId ?? [],
+      queryNames: opts.queryName,
       queryIdFilePathSubstrings:
         opts.queryIdPrefix && opts.queryIdPrefix.length ?
           opts.queryIdPrefix

@@ -27,6 +27,18 @@ const CONCURRENCY = Math.max(
   parseInt(process.env.ZS_BENCH_CONCURRENCY ?? "1", 10) || 1
 );
 
+function collectFlagValues(flagName) {
+  const values = [];
+  for (let i = 2; i < process.argv.length; i++) {
+    if (process.argv[i] === flagName) {
+      const v = process.argv[i + 1];
+      if (v && !v.startsWith("--")) values.push(v);
+      i += 1;
+    }
+  }
+  return values;
+}
+
 async function createBenchmarkPrisma() {
   const pglite = new PGlite("memory://");
   await pglite.waitReady;
@@ -54,6 +66,8 @@ async function main() {
   const queriesModule = path.join(cwd, ".zenstack-compare", "out", "queries.js");
   const enhanceV2 = path.join(cwd, "enhance-v2.mjs");
   const enhanceV3 = path.join(cwd, "enhance-v3.mjs");
+  const queryIds = collectFlagValues("--query-id");
+  const queryNames = collectFlagValues("--query-name");
 
   const rounds = await runBenchmark({
     cwd,
@@ -62,7 +76,8 @@ async function main() {
     enhanceV3Module: pathToFileURL(enhanceV3).href,
     prismaClientSpecifier: "@prisma/client",
     prismaFactory: createBenchmarkPrisma,
-    queryIds: [],
+    queryIds,
+    queryNames,
     queryIdFilePathSubstrings: [
       "benchmark-queries",
       "benchmark-scale-queries",

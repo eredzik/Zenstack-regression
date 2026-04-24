@@ -1,12 +1,23 @@
 import type { PrismaClient } from "@prisma/client";
 
 /** Large enough for string sort edge cases (e.g. "C100" vs "C9" in ORDER BY content). */
-const U1_POST_COUNT = 120;
+const DEFAULT_U1_POST_COUNT = 1000;
+const DEFAULT_U2_POST_COUNT = 1000;
+const DEFAULT_TASK_COUNT = 1000;
+
+export interface SeedDemoOptions {
+  /** Main benchmark fan-out size (u1 posts and one-to-one comments). */
+  u1PostCount?: number;
+  /** Secondary author posts count (u2). */
+  u2PostCount?: number;
+  /** Number of proj-alpha tasks in org graph fixture. */
+  taskCount?: number;
+}
 
 function makePostsForUser(
   count: number,
   authorId: string,
-  idPrefix: string
+  idPrefix: string,
 ): Array<{
   id: string;
   sequence: number;
@@ -29,7 +40,7 @@ function makePostsForUser(
 function makeOneToOneComments(
   count: number,
   idPrefix: string,
-  postIdOf: (seq: number) => string
+  postIdOf: (seq: number) => string,
 ) {
   return Array.from({ length: count }, (_, i) => {
     const sequence = count - i;
@@ -44,7 +55,14 @@ function makeOneToOneComments(
 }
 
 /** Same dataset as the original `seed.ts` CLI (used by PGlite benchmark and `npm run db:seed`). */
-export async function seedDemoDataset(prisma: PrismaClient): Promise<void> {
+export async function seedDemoDataset(
+  prisma: PrismaClient,
+  options: SeedDemoOptions = {},
+): Promise<void> {
+  const u1PostCount = Math.max(1, options.u1PostCount ?? DEFAULT_U1_POST_COUNT);
+  const u2PostCount = Math.max(1, options.u2PostCount ?? DEFAULT_U2_POST_COUNT);
+  const taskCount = Math.max(1, options.taskCount ?? DEFAULT_TASK_COUNT);
+  console.log("Started deletes");
   await prisma.taskLabel.deleteMany();
   await prisma.workLog.deleteMany();
   await prisma.task.deleteMany();
@@ -58,6 +76,7 @@ export async function seedDemoDataset(prisma: PrismaClient): Promise<void> {
   await prisma.comment.deleteMany();
   await prisma.post.deleteMany();
   await prisma.user.deleteMany();
+  console.log("Deleted all");
 
   const users = [
     { id: "u1", email: "u1@example.com" },
@@ -72,10 +91,10 @@ export async function seedDemoDataset(prisma: PrismaClient): Promise<void> {
 
   await prisma.user.createMany({ data: users });
 
-  const u1Posts = makePostsForUser(U1_POST_COUNT, "u1", "p");
+  const u1Posts = makePostsForUser(u1PostCount, "u1", "p");
   await prisma.post.createMany({ data: u1Posts });
 
-  const u1Comments = makeOneToOneComments(U1_POST_COUNT, "c", (seq) => `p${seq}`);
+  const u1Comments = makeOneToOneComments(u1PostCount, "c", (seq) => `p${seq}`);
   await prisma.comment.createMany({ data: u1Comments });
 
   await prisma.comment.createMany({
@@ -88,7 +107,7 @@ export async function seedDemoDataset(prisma: PrismaClient): Promise<void> {
     ],
   });
 
-  const u2Posts = Array.from({ length: 40 }, (_, i) => {
+  const u2Posts = Array.from({ length: u2PostCount }, (_, i) => {
     const n = i + 1;
     return {
       id: `q${n}`,
@@ -211,7 +230,14 @@ export async function seedDemoDataset(prisma: PrismaClient): Promise<void> {
   });
 
   await prisma.post.updateMany({
-    where: { id: { in: Array.from({ length: 30 }, (_, i) => `p${i + 1}`) } },
+    where: {
+      id: {
+        in: Array.from(
+          { length: Math.min(30, u1PostCount) },
+          (_, i) => `p${i + 1}`,
+        ),
+      },
+    },
     data: { projectId: "proj-alpha" },
   });
 
@@ -223,7 +249,7 @@ export async function seedDemoDataset(prisma: PrismaClient): Promise<void> {
     ],
   });
 
-  const taskRows = Array.from({ length: 24 }, (_, i) => {
+  const taskRows = Array.from({ length: taskCount }, (_, i) => {
     const n = i + 1;
     return {
       id: `task-a${String(n).padStart(2, "0")}`,
@@ -236,7 +262,7 @@ export async function seedDemoDataset(prisma: PrismaClient): Promise<void> {
   await prisma.task.createMany({ data: taskRows });
 
   const taskLabels: Array<{ taskId: string; labelId: string }> = [];
-  for (let i = 1; i <= 24; i++) {
+  for (let i = 1; i <= taskCount; i++) {
     const taskId = `task-a${String(i).padStart(2, "0")}`;
     taskLabels.push({ taskId, labelId: "lab-bug" });
     taskLabels.push({
@@ -252,7 +278,7 @@ export async function seedDemoDataset(prisma: PrismaClient): Promise<void> {
     userId: string;
     minutes: number;
   }> = [];
-  for (let i = 1; i <= 12; i++) {
+  for (let i = 1; i <= Math.min(12, taskCount); i++) {
     const taskId = `task-a${String(i).padStart(2, "0")}`;
     workLogs.push({
       id: `wl-${taskId}-1`,
@@ -296,7 +322,11 @@ export async function seedDemoDataset(prisma: PrismaClient): Promise<void> {
     "Seeded: users",
     users.length,
     "| u1 posts",
-    U1_POST_COUNT,
-    "+ extras | u2 posts 40 | org graph (2 orgs, 2 projects, 24 tasks, labels, work logs)"
+    u1PostCount,
+    "+ extras | u2 posts",
+    u2PostCount,
+    "| org graph (2 orgs, 2 projects,",
+    taskCount,
+    "tasks, labels, work logs)",
   );
 }

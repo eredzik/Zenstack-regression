@@ -1,7 +1,224 @@
 import path from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
-import type { BenchmarkOptions, BenchmarkRoundRow } from "./types.js";
+import type {
+  BenchmarkOptions,
+  BenchmarkRoundRow,
+  BenchmarkRecentQueryTiming,
+  BenchmarkSlowQueryTiming,
+  BenchmarkTimingStat,
+  BenchmarkV3Diagnostics,
+} from "./types.js";
+
+const DIAG_CATEGORY_KEYS = [
+  "queryTransformMs",
+  "nameMappingMs",
+  "tempAliasMs",
+  "compileMs",
+  "compileCacheKeyMs",
+  "compileCacheLookupMs",
+  "compileCacheStoreMs",
+  "dbExecuteMs",
+  "pluginOnKyselyMs",
+  "mutationHookMs",
+  "transactionOverheadMs",
+  "executorUntrackedMs",
+] as const;
+
+type DiagCategoryKey = (typeof DIAG_CATEGORY_KEYS)[number];
+
+function asFiniteNumber(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+function safeIso(v: unknown): string | undefined {
+  if (v instanceof Date && !Number.isNaN(v.getTime())) return v.toISOString();
+  if (typeof v === "string") {
+    const d = new Date(v);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  return undefined;
+}
+
+function truncateSql(sql: string, max = 140): string {
+  const compact = sql.replace(/\s+/g, " ").trim();
+  if (compact.length <= max) return compact;
+  return `${compact.slice(0, max - 1)}...`;
+}
+
+function readDiagnostics(db: unknown): Promise<unknown | null> {
+  if (!db || typeof db !== "object") return Promise.resolve(null);
+  if (!("$diagnostics" in db)) return Promise.resolve(null);
+  try {
+    const value = (db as { $diagnostics: unknown }).$diagnostics;
+    return Promise.resolve(value ?? null);
+  } catch {
+    return Promise.resolve(null);
+  }
+}
+
+function normalizeTimingStat(v: unknown): BenchmarkTimingStat | null {
+  if (!v || typeof v !== "object") return null;
+  const obj = v as Record<string, unknown>;
+  const count = asFiniteNumber(obj.count);
+  const totalMs = asFiniteNumber(obj.totalMs);
+  const maxMs = asFiniteNumber(obj.maxMs);
+  if (count === null || totalMs === null || maxMs === null) return null;
+  return { count, totalMs, maxMs };
+}
+
+function normalizeRecentQueryTiming(v: unknown): BenchmarkRecentQueryTiming | null {
+  if (!v || typeof v !== "object") return null;
+  const obj = v as Record<string, unknown>;
+  const sql = typeof obj.sql === "string" ? obj.sql : "";
+  const totalMs = asFiniteNumber(obj.totalMs);
+  const dbExecuteMs = asFiniteNumber(obj.dbExecuteMs);
+  const compileMs = asFiniteNumber(obj.compileMs);
+  const queryTransformMs = asFiniteNumber(obj.queryTransformMs);
+  if (
+    !sql ||
+    totalMs === null ||
+    dbExecuteMs === null ||
+    compileMs === null ||
+    queryTransformMs === null
+  ) {
+    return null;
+  }
+  return {
+    startedAt: safeIso(obj.startedAt),
+    sql,
+    totalMs,
+    dbExecuteMs,
+    compileMs,
+    queryTransformMs,
+    compileCacheHit: Boolean(obj.compileCacheHit),
+  };
+}
+
+function normalizeSlowQueryTiming(v: unknown): BenchmarkSlowQueryTiming | null {
+  if (!v || typeof v !== "object") return null;
+  const obj = v as Record<string, unknown>;
+  const sql = typeof obj.sql === "string" ? obj.sql : "";
+  const durationMs = asFiniteNumber(obj.durationMs);
+  if (!sql || durationMs === null) return null;
+  return { startedAt: safeIso(obj.startedAt), durationMs, sql };
+}
+
+function categoryTotal(diag: BenchmarkV3Diagnostics, key: DiagCategoryKey): number {
+  return diag.timingCategories[key]?.totalMs ?? 0;
+}
+
+function printV3DiagnosticsSummary(rounds: BenchmarkRoundRow[]): void {
+  const byId = new Map<string, BenchmarkRoundRow[]>();
+  for (const r of rounds) {
+    const arr = byId.get(r.id) ?? [];
+    arr.push(r);
+    byId.set(r.id, arr);
+  }
+  console.log("");
+  console.log("# v3 timing diagnostics (sample: first successful run per query)");
+  for (const [id, rs] of [...byId.entries()].sort((a, b) =>
+    a[0].localeCompare(b[0])
+  )) {
+    const sample = rs.find((r) => !r.errorV3 && r.v3Diagnostics);
+    if (!sample?.v3Diagnostics) continue;
+    const diag = sample.v3Diagnostics;
+    const label = `${sample.queryName ?? "-"} (${id})`;
+    const cat = DIAG_CATEGORY_KEYS.map((k) => `${k}=${categoryTotal(diag, k).toFixed(3)}`).join(", ");
+    console.log(`# ${label}`);
+    console.log(`  categories: ${cat}`);
+    if (!diag.recentQueries.length) {
+      console.log("  recent: (none)");
+      continue;
+    }
+    const recent = diag.recentQueries.slice(0, 20);
+    console.log("  recent:");
+    for (const q of recent) {
+      console.log(
+        `    total=${q.totalMs.toFixed(3)} db=${q.dbExecuteMs.toFixed(3)} compile=${q.compileMs.toFixed(3)} transform=${q.queryTransformMs.toFixed(3)} cacheHit=${q.compileCacheHit ? "Y" : "N"} sql=${truncateSql(q.sql, 120)}`
+      );
+    }
+  }
+}
+
+function captureWorkerDiagnostics(
+  diagnostics: unknown,
+  runStartMs: number
+): BenchmarkV3Diagnostics | null {
+  if (!diagnostics || typeof diagnostics !== "object") return null;
+  const obj = diagnostics as Record<string, unknown>;
+  const timing = obj.timing;
+  if (!timing || typeof timing !== "object") return null;
+  const timingObj = timing as Record<string, unknown>;
+  const categoriesObj =
+    timingObj.categories && typeof timingObj.categories === "object"
+      ? (timingObj.categories as Record<string, unknown>)
+      : {};
+  const timingCategories: BenchmarkV3Diagnostics["timingCategories"] = {};
+  for (const key of DIAG_CATEGORY_KEYS) {
+    const stat = normalizeTimingStat(categoriesObj[key]);
+    if (stat) timingCategories[key] = stat;
+  }
+  const recentArr = Array.isArray(timingObj.recentQueries)
+    ? timingObj.recentQueries
+    : [];
+  const recentQueries = recentArr
+    .map(normalizeRecentQueryTiming)
+    .filter((x): x is BenchmarkRecentQueryTiming => x !== null)
+    .filter((x) => {
+      if (!x.startedAt) return true;
+      const ts = Date.parse(x.startedAt);
+      return Number.isNaN(ts) || ts >= runStartMs - 1;
+    });
+
+  const slowArr = Array.isArray(obj.slowQueries) ? obj.slowQueries : [];
+  const slowQueries = slowArr
+    .map(normalizeSlowQueryTiming)
+    .filter((x): x is BenchmarkSlowQueryTiming => x !== null)
+    .filter((x) => {
+      if (!x.startedAt) return true;
+      const ts = Date.parse(x.startedAt);
+      return Number.isNaN(ts) || ts >= runStartMs - 1;
+    });
+
+  return {
+    timingCategories,
+    recentQueries,
+    slowQueries,
+  };
+}
+
+function mergeDiagnostics(
+  workerDiags: Array<BenchmarkV3Diagnostics | null>
+): BenchmarkV3Diagnostics | null {
+  const valid = workerDiags.filter((d): d is BenchmarkV3Diagnostics => !!d);
+  if (!valid.length) return null;
+  const timingCategories: BenchmarkV3Diagnostics["timingCategories"] = {};
+  for (const key of DIAG_CATEGORY_KEYS) {
+    let hasAny = false;
+    let count = 0;
+    let totalMs = 0;
+    let maxMs = 0;
+    for (const d of valid) {
+      const stat = d.timingCategories[key];
+      if (!stat) continue;
+      hasAny = true;
+      count += stat.count;
+      totalMs += stat.totalMs;
+      maxMs = Math.max(maxMs, stat.maxMs);
+    }
+    if (hasAny) timingCategories[key] = { count, totalMs, maxMs };
+  }
+  const recentQueries = valid
+    .flatMap((d) => d.recentQueries)
+    .sort((a, b) => b.totalMs - a.totalMs)
+    .slice(0, 20);
+  const slowQueries = valid
+    .flatMap((d) => d.slowQueries ?? [])
+    .sort((a, b) => b.durationMs - a.durationMs)
+    .slice(0, 20);
+  return { timingCategories, recentQueries, slowQueries };
+}
 
 export function summarizeMs(values: number[]): {
   n: number;
@@ -63,9 +280,34 @@ export function printBenchmarkSummary(
     byId.set(r.id, arr);
   }
 
-  console.log(
-    "queryId\tv2_wall_med\tv2_db_med\tv2_js_med\tv3_wall_med\tv3_db_med\tv3_js_med\tratio_v3/v2_wall\tv2_sql_n\tv3_sql_n\terrors"
-  );
+  const columns = [
+    { key: "queryId", width: 16, align: "left" as const },
+    { key: "queryName", width: 32, align: "left" as const },
+    { key: "v2_wall_med", width: 11, align: "right" as const },
+    { key: "v2_db_med", width: 9, align: "right" as const },
+    { key: "v2_js_med", width: 9, align: "right" as const },
+    { key: "v3_wall_med", width: 11, align: "right" as const },
+    { key: "v3_db_med", width: 9, align: "right" as const },
+    { key: "v3_js_med", width: 9, align: "right" as const },
+    { key: "ratio_v3/v2_wall", width: 16, align: "right" as const },
+    { key: "v2_sql_n", width: 8, align: "right" as const },
+    { key: "v3_sql_n", width: 8, align: "right" as const },
+    { key: "errors", width: 6, align: "left" as const },
+  ];
+  const formatCell = (
+    value: string,
+    width: number,
+    align: "left" | "right"
+  ): string => {
+    if (value.length >= width) return value;
+    return align === "right" ? value.padStart(width) : value.padEnd(width);
+  };
+  const formatRow = (values: string[]): string =>
+    values
+      .map((value, i) => formatCell(value, columns[i]!.width, columns[i]!.align))
+      .join("  ");
+
+  console.log(formatRow(columns.map((c) => c.key)));
   for (const [id, rs] of [...byId.entries()].sort((a, b) =>
     a[0].localeCompare(b[0])
   )) {
@@ -98,10 +340,29 @@ export function printBenchmarkSummary(
     const sql3Row = rs.find((x) => !x.errorV3);
     const sql2 = sql2Row?.v2SqlCount ?? 0;
     const sql3 = sql3Row?.v3SqlCount ?? 0;
-    const fmt = (s: ReturnType<typeof summarizeMs>) =>
-      s.n === 0 ? "n/a" : s.median.toFixed(3);
+    const fmt = (
+      s: ReturnType<typeof summarizeMs>,
+      opts?: { showSubMsHint?: boolean }
+    ) => {
+      if (s.n === 0) return "n/a";
+      if (opts?.showSubMsHint && s.median === 0) return "<1ms";
+      return s.median.toFixed(3);
+    };
     console.log(
-      `${id}\t${s2.median.toFixed(3)}\t${fmt(s2db)}\t${fmt(s2js)}\t${s3.median.toFixed(3)}\t${fmt(s3db)}\t${fmt(s3js)}\t${ratio}\t${sql2}\t${sql3}\t${err}`
+      formatRow([
+        id,
+        rs[0]?.queryName ?? "-",
+        s2.median.toFixed(3),
+        fmt(s2db, { showSubMsHint: true }),
+        fmt(s2js),
+        s3.median.toFixed(3),
+        fmt(s3db, { showSubMsHint: true }),
+        fmt(s3js),
+        ratio,
+        String(sql2),
+        String(sql3),
+        err,
+      ])
     );
   }
 
@@ -117,6 +378,7 @@ export function printBenchmarkSummary(
       "# With concurrency>1, db_* sums durations across parallel workers — can exceed wall_* because DB work overlaps in time."
     );
   }
+  printV3DiagnosticsSummary(rounds);
 }
 
 function prismaQueryFromEvent(e: unknown): string {
@@ -188,14 +450,14 @@ export async function runBenchmark(
       prisma: unknown,
       ctx?: unknown,
       opts?: { sqlCapture?: string[]; durationMsCapture?: number[] }
-    ) => Record<string, unknown>;
+    ) => Record<string, unknown> & { $diagnostics?: Promise<unknown> };
   };
 
   const queriesMod = (await importFromProject(options.queriesModule, cwd)) as {
     zenstackCompareQueries: Record<
       string,
       {
-        meta: { id: string };
+        meta: { id: string; file?: string; functionName?: string };
         run: (
           db: unknown,
           queryArgs?: Record<string, unknown>
@@ -203,7 +465,7 @@ export async function runBenchmark(
       }
     >;
     zenstackCompareQueryList: Array<{
-      meta: { id: string; file: string };
+      meta: { id: string; file: string; functionName?: string };
       run: (
         db: unknown,
         queryArgs?: Record<string, unknown>
@@ -247,7 +509,7 @@ export async function runBenchmark(
 
   /** v3: one client per concurrent worker so Kysely log arrays stay isolated. */
   const dbV3Workers: Array<{
-    db: unknown;
+    db: unknown & { $diagnostics?: Promise<unknown> };
     sqlCapture: string[];
     durationMsCapture: number[];
   }> = Array.from({ length: concurrency }, () => {
@@ -256,13 +518,13 @@ export async function runBenchmark(
     const db = enhanceV3.enhance(prisma, undefined, {
       sqlCapture,
       durationMsCapture,
-    }) as unknown;
+    }) as unknown as { $diagnostics?: Promise<unknown> };
     return { db, sqlCapture, durationMsCapture };
   });
 
   const fixtures = options.queryFixtures ?? {};
   const list: Array<{
-    meta: { id: string };
+    meta: { id: string; file?: string; functionName?: string };
     run: (
       db: unknown,
       queryArgs?: Record<string, unknown>
@@ -288,11 +550,24 @@ export async function runBenchmark(
     list.push(...all);
   }
 
+  if (options.queryNames?.length) {
+    const wantedNames = new Set(options.queryNames);
+    const filtered = list.filter((q) =>
+      q.meta.functionName ? wantedNames.has(q.meta.functionName) : false
+    );
+    list.length = 0;
+    list.push(...filtered);
+  }
+
   const rounds: BenchmarkRoundRow[] = [];
 
-  for (const bundle of list) {
+  for (let idx = 0; idx < list.length; idx++) {
+    const bundle = list[idx]!;
     const id = bundle.meta.id;
+    const queryName = bundle.meta.functionName;
     const queryArgs = fixtures[id];
+    const progressLabel = `[benchmark ${idx + 1}/${list.length}] ${queryName ?? "(unnamed)"} (${id})`;
+    console.error(`${progressLabel} starting`);
 
     for (let w = 0; w < options.warmups; w++) {
       sqlCaptureV2.length = 0;
@@ -334,6 +609,7 @@ export async function runBenchmark(
       let v3DbMs: number | null = null;
       let v2JsMs: number | null = null;
       let v3JsMs: number | null = null;
+      let v3Diagnostics: BenchmarkV3Diagnostics | null = null;
 
       sqlCaptureV2.length = 0;
       prismaDbDurationAccV2 = 0;
@@ -361,6 +637,7 @@ export async function runBenchmark(
         wr.durationMsCapture.length = 0;
       }
       const t3a = nowMs();
+      const v3RunStartedAtMs = Date.now();
       try {
         await Promise.all(
           dbV3Workers.map((wr) => bundle.run(wr.db, queryArgs))
@@ -374,15 +651,28 @@ export async function runBenchmark(
           0
         );
         v3JsMs = Math.max(0, v3Ms - (v3DbMs ?? 0));
+        const rawDiags = await Promise.all(
+          dbV3Workers.map((wr) => readDiagnostics(wr.db))
+        );
+        v3Diagnostics = mergeDiagnostics(
+          rawDiags.map((d) => captureWorkerDiagnostics(d, v3RunStartedAtMs))
+        );
       } catch (e) {
         errorV3 = e instanceof Error ? e.message : String(e);
         v3Ms = nowMs() - t3a;
         v3DbMs = null;
         v3JsMs = null;
+        const rawDiags = await Promise.all(
+          dbV3Workers.map((wr) => readDiagnostics(wr.db))
+        );
+        v3Diagnostics = mergeDiagnostics(
+          rawDiags.map((d) => captureWorkerDiagnostics(d, v3RunStartedAtMs))
+        );
       }
 
       rounds.push({
         id,
+        queryName,
         v2Ms,
         v3Ms,
         v2DbMs,
@@ -391,10 +681,12 @@ export async function runBenchmark(
         v3JsMs,
         v2SqlCount,
         v3SqlCount,
+        v3Diagnostics,
         errorV2,
         errorV3,
       });
     }
+    console.error(`${progressLabel} done`);
   }
 
   await prisma.$disconnect();

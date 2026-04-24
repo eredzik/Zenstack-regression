@@ -16,6 +16,7 @@ export type CompareRow = {
     dbAlias?: string;
     model?: string;
     method?: string;
+    functionName?: string;
   };
   querySourceTs: string;
   ok: boolean;
@@ -42,6 +43,7 @@ type LoadedQueryBundle = {
     dbAlias?: string;
     model?: string;
     method?: string;
+    functionName?: string;
   };
   querySourceTs: string;
   run: (db: unknown, params?: Record<string, unknown>) => Promise<unknown>;
@@ -302,6 +304,7 @@ export async function runCompare(options: CompareOptions): Promise<CompareRow[]>
         dbAlias?: string;
         model?: string;
         method?: string;
+        functionName?: string;
       };
       default?: (db: unknown, params?: Record<string, unknown>) => Promise<unknown>;
     };
@@ -330,6 +333,14 @@ export async function runCompare(options: CompareOptions): Promise<CompareRow[]>
 
   const list: LoadedQueryBundle[] = [];
   list.push(...bundles);
+  if (options.queryNames?.length) {
+    const wantedNames = new Set(options.queryNames);
+    const filtered = list.filter((b) =>
+      b.meta.functionName ? wantedNames.has(b.meta.functionName) : false
+    );
+    list.length = 0;
+    list.push(...filtered);
+  }
 
   for (const bundle of list) {
     const id = bundle.meta.id;

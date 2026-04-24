@@ -1,0 +1,2 @@
+overrides:
+  '@zenstackhq/orm': link:../zenstack/packages/orm

@@ -66,6 +66,7 @@ function generateQueryFile(
     dbAlias: q.dbAlias,
     model: q.model,
     method: q.method,
+    functionName: q.functionName,
   };
   const body = buildRunnerBody(q, txAliases);
 
@@ -110,6 +111,7 @@ export type QueryMeta = {
   dbAlias: string;
   model: string;
   method: string;
+  functionName?: string;
 };
 `;
 }
@@ -163,7 +165,12 @@ import { createEnhancement } from "@zenstackhq/runtime-v2/enhancements/node";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
-const prismaModule = require("@prisma/client");
+let prismaModule;
+try {
+  prismaModule = require("@prisma/client");
+} catch {
+  prismaModule = require(path.join(__dirname, "../node_modules/.prisma/client/index.js"));
+}
 
 function tryLoadJson(p) {
   try {
@@ -202,12 +209,32 @@ function isPostgresUrl(url) {
   return typeof url === "string" && (url.startsWith("postgresql:") || url.startsWith("postgres:"));
 }
 
+function extractSqlFromLogEvent(event) {
+  if (!event || typeof event !== "object") return undefined;
+  const candidates = [
+    event.query?.sql,
+    event.query?.query,
+    event.query?.text,
+    event.query,
+    event.sql,
+    event.statement,
+  ];
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return undefined;
+}
+
 export function enhance(_prisma, _ctx, options = {}) {
   const sqlCapture = Array.isArray(options.sqlCapture) ? options.sqlCapture : undefined;
   const log =
     sqlCapture ?
       (event) => {
-        if (event.level === "query" && event.query?.sql) sqlCapture.push(String(event.query.sql).trim());
+        if (event.level !== "query") return;
+        const sql = extractSqlFromLogEvent(event);
+        if (sql) sqlCapture.push(sql);
       }
     : undefined;
 
@@ -215,6 +242,7 @@ export function enhance(_prisma, _ctx, options = {}) {
   if (isPostgresUrl(dbUrl)) {
     return new ZenStackClient(schema, {
       dialect: new PostgresDialect({ pool: new Pool({ connectionString: dbUrl }) }),
+      setBasedNestedInclude: true,
       log: log ?? undefined,
     });
   }
@@ -226,6 +254,7 @@ export function enhance(_prisma, _ctx, options = {}) {
 
   return new ZenStackClient(schema, {
     dialect: new SqliteDialect({ database: new Database(sqlitePath) }),
+    setBasedNestedInclude: true,
     log: log ?? undefined,
   });
 }

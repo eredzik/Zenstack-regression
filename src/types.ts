@@ -9,6 +9,8 @@ export interface ExtractedQuery {
   dbAlias: string;
   model: string;
   method: string;
+  /** Enclosing function/method/variable name when detectable */
+  functionName?: string;
   /** First argument source text, if present */
   arg0Source: string | null;
   /** Full argument list source inside (...) */
@@ -54,6 +56,8 @@ export interface CompareOptions {
   enhanceV3Module: string;
   prismaClientSpecifier: string;
   queryIds?: string[];
+  /** Optional filter: run only queries whose extracted function name matches one of these values. */
+  queryNames?: string[];
   json: boolean;
   /**
    * When true, `ok` only requires matching results and no errors (SQL strings may differ).
@@ -74,6 +78,8 @@ export interface CompareOptions {
 /** One timed round for a single query id on both ZenStack sides (v2 then v3). */
 export interface BenchmarkRoundRow {
   id: string;
+  /** Enclosing function/method/variable name when detectable. */
+  queryName?: string;
   /** Wall-clock time for the full `run()` (ORM + DB + result shaping). */
   v2Ms: number;
   v3Ms: number;
@@ -92,8 +98,54 @@ export interface BenchmarkRoundRow {
   v3JsMs: number | null;
   v2SqlCount: number;
   v3SqlCount: number;
+  /** ZenStack v3 runtime diagnostics captured for this benchmark iteration. */
+  v3Diagnostics?: BenchmarkV3Diagnostics | null;
   errorV2: string | null;
   errorV3: string | null;
+}
+
+export interface BenchmarkTimingStat {
+  count: number;
+  totalMs: number;
+  maxMs: number;
+}
+
+export interface BenchmarkRecentQueryTiming {
+  startedAt?: string;
+  sql: string;
+  totalMs: number;
+  dbExecuteMs: number;
+  compileMs: number;
+  queryTransformMs: number;
+  compileCacheHit: boolean;
+}
+
+export interface BenchmarkSlowQueryTiming {
+  startedAt?: string;
+  durationMs: number;
+  sql: string;
+}
+
+export interface BenchmarkV3Diagnostics {
+  timingCategories: Partial<
+    Record<
+      | "queryTransformMs"
+      | "nameMappingMs"
+      | "tempAliasMs"
+      | "compileMs"
+      | "compileCacheKeyMs"
+      | "compileCacheLookupMs"
+      | "compileCacheStoreMs"
+      | "dbExecuteMs"
+      | "pluginOnKyselyMs"
+      | "mutationHookMs"
+      | "transactionOverheadMs"
+      | "executorUntrackedMs",
+      BenchmarkTimingStat
+    >
+  >;
+  recentQueries: BenchmarkRecentQueryTiming[];
+  slowQueries?: BenchmarkSlowQueryTiming[];
 }
 
 export interface BenchmarkOptions {
@@ -117,6 +169,8 @@ export interface BenchmarkOptions {
   }>;
   /** If empty, all queries in the module are benchmarked. */
   queryIds: string[];
+  /** Optional filter: benchmark only queries whose extracted function name matches one of these values. */
+  queryNames?: string[];
   /**
    * If set, only queries whose extracted `file` path includes **any** of these
    * substrings (e.g. `["benchmark-queries", "benchmark-scale"]`).

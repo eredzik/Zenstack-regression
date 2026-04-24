@@ -124,6 +124,7 @@ function extractCall(
   );
 
   const relFile = path.relative(options.root, sourceFile.fileName);
+  const functionName = getEnclosingFunctionName(node);
   const id = shortId([
     relFile,
     String(line),
@@ -142,10 +143,42 @@ function extractCall(
     dbAlias: clientSource,
     model,
     method,
+    functionName,
     arg0Source,
     argsSource: argsText,
     params: inferQueryParams(node, checker),
   };
+}
+
+function namedPropertyName(name: ts.PropertyName | ts.MemberName): string | null {
+  if (ts.isIdentifier(name)) return name.text;
+  if (ts.isStringLiteral(name) || ts.isNoSubstitutionTemplateLiteral(name)) {
+    return name.text;
+  }
+  return null;
+}
+
+function getEnclosingFunctionName(node: ts.Node): string | undefined {
+  let cur: ts.Node | undefined = node;
+  while (cur) {
+    if (ts.isFunctionDeclaration(cur) && cur.name?.text) {
+      return cur.name.text;
+    }
+    if (ts.isMethodDeclaration(cur) && cur.name) {
+      return namedPropertyName(cur.name) ?? undefined;
+    }
+    if ((ts.isFunctionExpression(cur) || ts.isArrowFunction(cur)) && cur.parent) {
+      const p = cur.parent;
+      if (ts.isVariableDeclaration(p) && ts.isIdentifier(p.name)) {
+        return p.name.text;
+      }
+      if (ts.isPropertyAssignment(p)) {
+        return namedPropertyName(p.name) ?? undefined;
+      }
+    }
+    cur = cur.parent;
+  }
+  return undefined;
 }
 
 function visit(

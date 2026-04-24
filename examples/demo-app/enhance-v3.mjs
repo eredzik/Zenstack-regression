@@ -64,6 +64,40 @@ function getBenchPglite() {
   return g.__zenstackBenchPglite ?? null;
 }
 
+function extractSqlFromLogEvent(event) {
+  if (!event || typeof event !== "object") return undefined;
+  const candidates = [
+    event.query?.sql,
+    event.query?.query,
+    event.query?.text,
+    event.query,
+    event.sql,
+    event.statement,
+  ];
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return undefined;
+}
+
+function extractDurationMsFromLogEvent(event) {
+  if (!event || typeof event !== "object") return undefined;
+  const candidates = [
+    event.queryDurationMillis,
+    event.durationMs,
+    event.duration,
+    event.elapsedMs,
+  ];
+  for (const value of candidates) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 export function enhance(_prisma, _ctx, options = {}) {
   const sqlCapture = options.sqlCapture;
   const durationMsCapture = options.durationMsCapture;
@@ -72,14 +106,16 @@ export function enhance(_prisma, _ctx, options = {}) {
   const log = needsLog
     ? (event) => {
         if (event.level !== "query") return;
-        if (Array.isArray(sqlCapture) && event.query?.sql) {
-          sqlCapture.push(String(event.query.sql).trim());
+        const sql = extractSqlFromLogEvent(event);
+        if (Array.isArray(sqlCapture) && sql) {
+          sqlCapture.push(sql);
         }
+        const durationMs = extractDurationMsFromLogEvent(event);
         if (
           Array.isArray(durationMsCapture) &&
-          typeof event.queryDurationMillis === "number"
+          typeof durationMs === "number"
         ) {
-          durationMsCapture.push(event.queryDurationMillis);
+          durationMsCapture.push(durationMs);
         }
       }
     : undefined;
@@ -88,7 +124,11 @@ export function enhance(_prisma, _ctx, options = {}) {
   if (benchPglite) {
     return new ZenStackClient(schema, {
       dialect: new PGliteDialect(benchPglite),
+
+      setBasedNestedInclude: true,
+      postgresNestedRelationDialect: "cte",
       log: log ?? undefined,
+      diagnostics: { slowQueryThresholdMs: 0, timingMaxRecords: Infinity },
     });
   }
 
@@ -98,7 +138,13 @@ export function enhance(_prisma, _ctx, options = {}) {
     const pool = getPgPool(dbUrl);
     return new ZenStackClient(schema, {
       dialect: new PostgresDialect({ pool }),
-      log: log ?? undefined,
+      // setBasedNestedInclude: true,
+      // postgresNestedRelationDialect: "cte",
+      log: (...args) => {
+        // console.log(...args);
+        log?.(...args);
+      },
+      diagnostics: { slowQueryThresholdMs: 0, timingMaxRecords: Infinity },
     });
   }
 
@@ -106,6 +152,9 @@ export function enhance(_prisma, _ctx, options = {}) {
   const pool = getSqlitePool(dbPath);
   return new ZenStackClient(schema, {
     dialect: new SqliteDialect({ database: pool }),
+    setBasedNestedInclude: true,
+    postgresNestedRelationDialect: true,
     log: log ?? undefined,
+    diagnostics: { slowQueryThresholdMs: 0, timingMaxRecords: Infinity },
   });
 }

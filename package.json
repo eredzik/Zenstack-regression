@@ -19,6 +19,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@zenstackhq/orm": "link:../zenstack/packages/orm",
     "commander": "^12.1.0",
     "fast-glob": "^3.3.3",
     "typescript": "^5.7.3"
