@@ -37,6 +37,25 @@ export class SchemaType implements SchemaDef {
                     type: "Comment",
                     array: true,
                     relation: { opposite: "author" }
+                },
+                teamMembers: {
+                    name: "teamMembers",
+                    type: "TeamMember",
+                    array: true,
+                    relation: { opposite: "user" }
+                },
+                tasksAssigned: {
+                    name: "tasksAssigned",
+                    type: "Task",
+                    array: true,
+                    attributes: [{ name: "@relation", args: [{ name: "name", value: ExpressionUtils.literal("task_assignee") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "assignee", name: "task_assignee" }
+                },
+                workLogs: {
+                    name: "workLogs",
+                    type: "WorkLog",
+                    array: true,
+                    relation: { opposite: "user" }
                 }
             },
             idFields: ["id"],
@@ -86,6 +105,21 @@ export class SchemaType implements SchemaDef {
                     type: "Comment",
                     array: true,
                     relation: { opposite: "post" }
+                },
+                projectId: {
+                    name: "projectId",
+                    type: "String",
+                    optional: true,
+                    foreignKeyFor: [
+                        "project"
+                    ] as readonly string[]
+                },
+                project: {
+                    name: "project",
+                    type: "Project",
+                    optional: true,
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("projectId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("SetNull") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "posts", fields: ["projectId"], references: ["id"], onDelete: "SetNull" }
                 }
             },
             idFields: ["id"],
@@ -133,6 +167,394 @@ export class SchemaType implements SchemaDef {
                     foreignKeyFor: [
                         "author"
                     ] as readonly string[]
+                }
+            },
+            idFields: ["id"],
+            uniqueFields: {
+                id: { type: "String" }
+            }
+        },
+        Org: {
+            name: "Org",
+            fields: {
+                id: {
+                    name: "id",
+                    type: "String",
+                    id: true,
+                    attributes: [{ name: "@id" }] as readonly AttributeApplication[]
+                },
+                name: {
+                    name: "name",
+                    type: "String"
+                },
+                teams: {
+                    name: "teams",
+                    type: "Team",
+                    array: true,
+                    relation: { opposite: "org" }
+                }
+            },
+            idFields: ["id"],
+            uniqueFields: {
+                id: { type: "String" }
+            }
+        },
+        Team: {
+            name: "Team",
+            fields: {
+                id: {
+                    name: "id",
+                    type: "String",
+                    id: true,
+                    attributes: [{ name: "@id" }] as readonly AttributeApplication[]
+                },
+                name: {
+                    name: "name",
+                    type: "String"
+                },
+                orgId: {
+                    name: "orgId",
+                    type: "String",
+                    foreignKeyFor: [
+                        "org"
+                    ] as readonly string[]
+                },
+                org: {
+                    name: "org",
+                    type: "Org",
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("orgId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "teams", fields: ["orgId"], references: ["id"], onDelete: "Cascade" }
+                },
+                members: {
+                    name: "members",
+                    type: "TeamMember",
+                    array: true,
+                    relation: { opposite: "team" }
+                },
+                projects: {
+                    name: "projects",
+                    type: "Project",
+                    array: true,
+                    relation: { opposite: "team" }
+                }
+            },
+            idFields: ["id"],
+            uniqueFields: {
+                id: { type: "String" }
+            }
+        },
+        TeamMember: {
+            name: "TeamMember",
+            fields: {
+                id: {
+                    name: "id",
+                    type: "String",
+                    id: true,
+                    attributes: [{ name: "@id" }] as readonly AttributeApplication[]
+                },
+                teamId: {
+                    name: "teamId",
+                    type: "String",
+                    foreignKeyFor: [
+                        "team"
+                    ] as readonly string[]
+                },
+                userId: {
+                    name: "userId",
+                    type: "String",
+                    foreignKeyFor: [
+                        "user"
+                    ] as readonly string[]
+                },
+                role: {
+                    name: "role",
+                    type: "String"
+                },
+                team: {
+                    name: "team",
+                    type: "Team",
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("teamId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "members", fields: ["teamId"], references: ["id"], onDelete: "Cascade" }
+                },
+                user: {
+                    name: "user",
+                    type: "User",
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("userId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "teamMembers", fields: ["userId"], references: ["id"], onDelete: "Cascade" }
+                }
+            },
+            attributes: [
+                { name: "@@unique", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("teamId"), ExpressionUtils.field("userId")]) }] }
+            ] as readonly AttributeApplication[],
+            idFields: ["id"],
+            uniqueFields: {
+                id: { type: "String" },
+                teamId_userId: { teamId: { type: "String" }, userId: { type: "String" } }
+            }
+        },
+        Project: {
+            name: "Project",
+            fields: {
+                id: {
+                    name: "id",
+                    type: "String",
+                    id: true,
+                    attributes: [{ name: "@id" }] as readonly AttributeApplication[]
+                },
+                teamId: {
+                    name: "teamId",
+                    type: "String",
+                    foreignKeyFor: [
+                        "team"
+                    ] as readonly string[]
+                },
+                name: {
+                    name: "name",
+                    type: "String"
+                },
+                weight: {
+                    name: "weight",
+                    type: "Int",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal(0) }] }] as readonly AttributeApplication[],
+                    default: 0 as FieldDefault
+                },
+                team: {
+                    name: "team",
+                    type: "Team",
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("teamId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "projects", fields: ["teamId"], references: ["id"], onDelete: "Cascade" }
+                },
+                tasks: {
+                    name: "tasks",
+                    type: "Task",
+                    array: true,
+                    relation: { opposite: "project" }
+                },
+                posts: {
+                    name: "posts",
+                    type: "Post",
+                    array: true,
+                    relation: { opposite: "project" }
+                },
+                documents: {
+                    name: "documents",
+                    type: "Document",
+                    array: true,
+                    relation: { opposite: "project" }
+                }
+            },
+            idFields: ["id"],
+            uniqueFields: {
+                id: { type: "String" }
+            }
+        },
+        Task: {
+            name: "Task",
+            fields: {
+                id: {
+                    name: "id",
+                    type: "String",
+                    id: true,
+                    attributes: [{ name: "@id" }] as readonly AttributeApplication[]
+                },
+                projectId: {
+                    name: "projectId",
+                    type: "String",
+                    foreignKeyFor: [
+                        "project"
+                    ] as readonly string[]
+                },
+                title: {
+                    name: "title",
+                    type: "String"
+                },
+                status: {
+                    name: "status",
+                    type: "String"
+                },
+                assigneeId: {
+                    name: "assigneeId",
+                    type: "String",
+                    optional: true,
+                    foreignKeyFor: [
+                        "assignee"
+                    ] as readonly string[]
+                },
+                project: {
+                    name: "project",
+                    type: "Project",
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("projectId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "tasks", fields: ["projectId"], references: ["id"], onDelete: "Cascade" }
+                },
+                assignee: {
+                    name: "assignee",
+                    type: "User",
+                    optional: true,
+                    attributes: [{ name: "@relation", args: [{ name: "name", value: ExpressionUtils.literal("task_assignee") }, { name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("assigneeId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "tasksAssigned", name: "task_assignee", fields: ["assigneeId"], references: ["id"] }
+                },
+                workLogs: {
+                    name: "workLogs",
+                    type: "WorkLog",
+                    array: true,
+                    relation: { opposite: "task" }
+                },
+                labels: {
+                    name: "labels",
+                    type: "TaskLabel",
+                    array: true,
+                    relation: { opposite: "task" }
+                }
+            },
+            idFields: ["id"],
+            uniqueFields: {
+                id: { type: "String" }
+            }
+        },
+        WorkLog: {
+            name: "WorkLog",
+            fields: {
+                id: {
+                    name: "id",
+                    type: "String",
+                    id: true,
+                    attributes: [{ name: "@id" }] as readonly AttributeApplication[]
+                },
+                taskId: {
+                    name: "taskId",
+                    type: "String",
+                    foreignKeyFor: [
+                        "task"
+                    ] as readonly string[]
+                },
+                userId: {
+                    name: "userId",
+                    type: "String",
+                    foreignKeyFor: [
+                        "user"
+                    ] as readonly string[]
+                },
+                minutes: {
+                    name: "minutes",
+                    type: "Int"
+                },
+                task: {
+                    name: "task",
+                    type: "Task",
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("taskId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "workLogs", fields: ["taskId"], references: ["id"], onDelete: "Cascade" }
+                },
+                user: {
+                    name: "user",
+                    type: "User",
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("userId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "workLogs", fields: ["userId"], references: ["id"], onDelete: "Cascade" }
+                }
+            },
+            idFields: ["id"],
+            uniqueFields: {
+                id: { type: "String" }
+            }
+        },
+        Label: {
+            name: "Label",
+            fields: {
+                id: {
+                    name: "id",
+                    type: "String",
+                    id: true,
+                    attributes: [{ name: "@id" }] as readonly AttributeApplication[]
+                },
+                name: {
+                    name: "name",
+                    type: "String",
+                    unique: true,
+                    attributes: [{ name: "@unique" }] as readonly AttributeApplication[]
+                },
+                tasks: {
+                    name: "tasks",
+                    type: "TaskLabel",
+                    array: true,
+                    relation: { opposite: "label" }
+                }
+            },
+            idFields: ["id"],
+            uniqueFields: {
+                id: { type: "String" },
+                name: { type: "String" }
+            }
+        },
+        TaskLabel: {
+            name: "TaskLabel",
+            fields: {
+                taskId: {
+                    name: "taskId",
+                    type: "String",
+                    id: true,
+                    foreignKeyFor: [
+                        "task"
+                    ] as readonly string[]
+                },
+                labelId: {
+                    name: "labelId",
+                    type: "String",
+                    id: true,
+                    foreignKeyFor: [
+                        "label"
+                    ] as readonly string[]
+                },
+                task: {
+                    name: "task",
+                    type: "Task",
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("taskId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "labels", fields: ["taskId"], references: ["id"], onDelete: "Cascade" }
+                },
+                label: {
+                    name: "label",
+                    type: "Label",
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("labelId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "tasks", fields: ["labelId"], references: ["id"], onDelete: "Cascade" }
+                }
+            },
+            attributes: [
+                { name: "@@id", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("taskId"), ExpressionUtils.field("labelId")]) }] }
+            ] as readonly AttributeApplication[],
+            idFields: ["taskId", "labelId"],
+            uniqueFields: {
+                taskId_labelId: { taskId: { type: "String" }, labelId: { type: "String" } }
+            }
+        },
+        Document: {
+            name: "Document",
+            fields: {
+                id: {
+                    name: "id",
+                    type: "String",
+                    id: true,
+                    attributes: [{ name: "@id" }] as readonly AttributeApplication[]
+                },
+                projectId: {
+                    name: "projectId",
+                    type: "String",
+                    foreignKeyFor: [
+                        "project"
+                    ] as readonly string[]
+                },
+                title: {
+                    name: "title",
+                    type: "String"
+                },
+                bodyMd: {
+                    name: "bodyMd",
+                    type: "String",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("") }] }] as readonly AttributeApplication[],
+                    default: "" as FieldDefault
+                },
+                project: {
+                    name: "project",
+                    type: "Project",
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("projectId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "documents", fields: ["projectId"], references: ["id"], onDelete: "Cascade" }
                 }
             },
             idFields: ["id"],

@@ -5,12 +5,13 @@ import { Command } from "commander";
 import { buildManifest, defaultPrismaQueryMethods } from "./extract.js";
 import { writeQueriesDir } from "./codegen.js";
 import { runCompare } from "./compare.js";
+import { printBenchmarkSummary, runBenchmark } from "./benchmark.js";
 import { loadQueryFixtures, writeFixturesTemplate } from "./fixtures.js";
 import {
   generateFakerSeedScriptFromDmmf,
   loadDmmfModels,
 } from "./seed-faker.js";
-import type { ExtractOptions } from "./types.js";
+import type { BenchmarkOptions, ExtractOptions } from "./types.js";
 
 function toImportUrl(spec: string, cwd: string): string {
   if (spec.startsWith("file:")) return spec;
@@ -175,6 +176,108 @@ program
       queryFixtures,
       markdownOutputFile: opts.mdOut,
     });
+  });
+
+program
+  .command("benchmark")
+  .description(
+    "Time ZenStack v2 vs v3 for each query (interleaved rounds; wall-clock per side)"
+  )
+  .requiredOption(
+    "--queries-module <spec>",
+    "Path or URL to generated queries module (e.g. ./.zenstack-compare/out/queries.js)"
+  )
+  .option("--cwd <dir>", "Working directory", process.cwd())
+  .option("--prisma-client <spec>", "PrismaClient import", "@prisma/client")
+  .option("--enhance-v2 <spec>", "ZenStack v2 enhance module", "@zenstackhq/runtime")
+  .option("--enhance-v3 <spec>", "ZenStack v3 enhance module", "@zenstackhq/runtime")
+  .option("--query-id <ids...>", "Only benchmark these query id(s)")
+  .option(
+    "--query-id-prefix <prefix>",
+    "Only benchmark queries whose extract file path contains this substring (repeat flag for multiple)",
+    (val: string, prev: string[] | undefined) => {
+      const arr = prev ?? [];
+      arr.push(val);
+      return arr;
+    },
+    []
+  )
+  .option("--fixtures <file>", "JSON fixtures merged into each query (same as compare)")
+  .option("--warmup <n>", "Warmup rounds per query per side", "2")
+  .option("--iterations <n>", "Timed iterations per query", "30")
+  .option(
+    "--concurrency <n>",
+    "Parallel identical runs per side per iteration (Promise.all); wall = batch time; sql/db summed",
+    "1"
+  )
+  .option(
+    "--prisma-factory-module <spec>",
+    "ESM module URL exporting createBenchmarkPrisma(): Promise<PrismaClient-like> (skips default PrismaClient ctor)"
+  )
+  .option("--json", "Print machine-readable JSON", false)
+  .action(async (opts: {
+    queriesModule: string;
+    cwd: string;
+    prismaClient: string;
+    enhanceV2: string;
+    enhanceV3: string;
+    queryId?: string[];
+    queryIdPrefix?: string[];
+    fixtures?: string;
+    warmup: string;
+    iterations: string;
+    concurrency: string;
+    prismaFactoryModule?: string;
+    json: boolean;
+  }) => {
+    const cwd = path.resolve(opts.cwd);
+    const queriesModule = toImportUrl(opts.queriesModule, cwd);
+    const enhanceV2 = toImportUrl(opts.enhanceV2, cwd);
+    const enhanceV3 = toImportUrl(opts.enhanceV3, cwd);
+    const prismaClientSpecifier = opts.prismaClient.startsWith(".")
+      ? toImportUrl(opts.prismaClient, cwd)
+      : opts.prismaClient;
+    const queryFixtures = loadQueryFixtures(opts.fixtures);
+
+    let prismaFactory: BenchmarkOptions["prismaFactory"];
+    if (opts.prismaFactoryModule) {
+      const factoryUrl = toImportUrl(opts.prismaFactoryModule, cwd);
+      const mod = (await import(factoryUrl)) as {
+        createBenchmarkPrisma?: () => Promise<{
+          $connect: () => Promise<void>;
+          $disconnect: () => Promise<void>;
+          $on: (event: string, cb: (e: unknown) => void) => void;
+        }>;
+      };
+      if (typeof mod.createBenchmarkPrisma !== "function") {
+        throw new Error(
+          `${factoryUrl} must export async function createBenchmarkPrisma()`
+        );
+      }
+      prismaFactory = mod.createBenchmarkPrisma;
+    }
+
+    const conc = Math.max(1, parseInt(opts.concurrency, 10) || 1);
+
+    const rounds = await runBenchmark({
+      cwd,
+      queriesModule,
+      enhanceV2Module: enhanceV2,
+      enhanceV3Module: enhanceV3,
+      prismaClientSpecifier,
+      prismaFactory,
+      queryIds: opts.queryId ?? [],
+      queryIdFilePathSubstrings:
+        opts.queryIdPrefix && opts.queryIdPrefix.length ?
+          opts.queryIdPrefix
+        : undefined,
+      queryFixtures,
+      warmups: parseInt(opts.warmup, 10) || 0,
+      iterations: parseInt(opts.iterations, 10) || 1,
+      concurrency: conc,
+    });
+
+    printBenchmarkSummary(rounds, opts.json, { concurrency: conc });
   });
 
 program
